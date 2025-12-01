@@ -1,0 +1,24 @@
+{
+	"name": "ezconv",
+	"module": "server.js",
+	"type": "module",
+	"private": true,
+	"scripts": {
+		"install:client": "cd client && bun install",
+		"install:server": "bun install",
+		"install:all": "npm run install:server && npm run install:client",
+		"dev:client": "cd client && bun dev",
+		"dev:server": "bun --env-file .env --watch server.js",
+		"dev": "conc -n \"CLIENT,API\" -c \"cyan,yellow\" \"npm run dev:client\" \"npm run dev:server\"",
+		"build-client": "cd client && bun run build",
+		"build:all": "npm run build-client",
+		"start": "bun --env-file .env server.js"
+	},
+	"devDependencies": {
+		"@types/bun": "latest",
+		"concurrently": "^9.2.1"
+	},
+	"peerDependencies": {
+		"typescript": "^5"
+	}
+}
