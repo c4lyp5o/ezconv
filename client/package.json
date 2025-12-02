@@ -12,11 +12,13 @@
 		"test:ui": "vitest --ui"
 	},
 	"dependencies": {
+		"@ffmpeg/ffmpeg": "^0.12.10",
+		"@ffmpeg/util": "^0.12.2",
 		"@tailwindcss/vite": "^4.1.17",
+		"papaparse": "^5.4.1",
 		"react": "^19.2.0",
 		"react-dom": "^19.2.0",
 		"tailwindcss": "^4.1.17",
-		"papaparse": "^5.4.1",
 		"xlsx": "^0.18.5"
 	},
 	"devDependencies": {
