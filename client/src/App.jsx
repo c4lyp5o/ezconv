@@ -1,4 +1,12 @@
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
+import {
+	getFileCategory,
+	ALL_EXTENSIONS,
+	AUDIO_EXTENSIONS,
+	DATA_EXTENSIONS,
+	IMAGE_EXTENSIONS,
+	VIDEO_EXTENSIONS,
+} from "./file-config";
 
 function getFileExtension(filename) {
 	return filename
@@ -35,31 +43,75 @@ export default function App() {
 
 	const isConverting = status.toLowerCase().includes("convert");
 
+	// UI flags
+	const [ffmpegLoading, setFfmpegLoading] = useState(false);
+	const [ffmpegProgress, setFfmpegProgress] = useState(0);
+	const [ffmpegLogs, setFfmpegLogs] = useState([]);
+	const [showLogs, setShowLogs] = useState(false);
+
+	// File size limits per category (bytes)
+	const SIZE_LIMITS = {
+		data: 10 * 1024 * 1024, // 10 MB
+		image: 15 * 1024 * 1024, // 15 MB
+		audio: 80 * 1024 * 1024, // 80 MB
+		video: 30 * 1024 * 1024, // 30 MB (Reduced to prevent memory errors)
+	};
+
 	useEffect(() => {
 		const w = new Worker(new URL("./worker.js", import.meta.url), {
 			type: "module",
 		});
 		workerRef.current = w;
 		w.onmessage = (e) => {
-			const d = e.data;
-			if (d.status === "done") {
-				setStatus("Done");
-				setToast({ message: "✓ Conversion successful!", type: "success" });
-				const ab = d.buffer;
-				const blob = new Blob([ab], {
-					type: d.mime || "application/octet-stream",
-				});
-				const url = URL.createObjectURL(blob);
-				const a = document.createElement("a");
-				a.href = url;
-				a.download = d.filename || "output";
-				document.body.appendChild(a);
-				a.click();
-				a.remove();
-				URL.revokeObjectURL(url);
-			} else if (d.status === "error") {
-				setStatus("Error");
-				setToast({ message: `✗ Error: ${d.message}`, type: "error" });
+			const { status, message, ratio, buffer, mime, filename } = e.data;
+
+			switch (status) {
+				case "ffmpeg-loading":
+					setFfmpegLoading(true);
+					setStatus("Loading FFmpeg...");
+					break;
+				case "ffmpeg-ready":
+					setFfmpegLoading(false);
+					setStatus("Converting...");
+					console.log("[worker] FFmpeg ready");
+					break;
+				case "ffmpeg-log":
+					setFfmpegLogs((s) => {
+						const nxt = [...s.slice(-199), message];
+						return nxt;
+					});
+					console.log("[ffmpeg]", message);
+					break;
+				case "ffmpeg-progress":
+					setFfmpegProgress(Number(ratio || 0));
+					break;
+				case "log":
+					console.log("[worker]", message);
+					setFfmpegLogs((s) => {
+						const nxt = [...s.slice(-199), message];
+						return nxt;
+					});
+					break;
+				case "done": {
+					setStatus("Done");
+					setToast({ message: "✓ Conversion successful!", type: "success" });
+					const blob = new Blob([buffer], {
+						type: mime || "application/octet-stream",
+					});
+					const url = URL.createObjectURL(blob);
+					const a = document.createElement("a");
+					a.href = url;
+					a.download = filename || "output";
+					document.body.appendChild(a);
+					a.click();
+					a.remove();
+					URL.revokeObjectURL(url);
+					break;
+				}
+				case "error":
+					setStatus("Error");
+					setToast({ message: `✗ Error: ${message}`, type: "error" });
+					break;
 			}
 		};
 		return () => {
@@ -83,18 +135,48 @@ export default function App() {
 		setExt(newExt);
 		setIsDragging(false);
 
-		// set reasonable default targets
-		if (newExt === "json") setTarget("csv");
-		else if (newExt === "csv") setTarget("json");
-		else setTarget(newExt === "xlsx" || newExt === "xls" ? "csv" : "csv");
+		// Set reasonable default targets based on file type
+		const category = getFileCategory(newExt);
+		if (category === "data") {
+			if (newExt === "json") setTarget("csv");
+			else if (newExt === "csv") setTarget("json");
+			else setTarget("csv");
+		} else if (category === "image") {
+			setTarget("png");
+		} else if (category === "audio") {
+			setTarget("mp3");
+		} else if (category === "video") {
+			setTarget("mp4");
+		}
 	}
 
 	async function handleConvert() {
+		console.log(target);
 		if (!file || !workerRef.current) return;
+
+		if (!target) return;
 
 		try {
 			setStatus("Reading file...");
-			const isBinary = ext === "xlsx" || ext === "xls";
+			const category = getFileCategory(ext);
+			const isBinary =
+				ext === "xlsx" ||
+				ext === "xls" ||
+				category === "image" ||
+				category === "audio" ||
+				category === "video";
+
+			// File size check
+			const limit = SIZE_LIMITS[category] || SIZE_LIMITS.data;
+			if (file.size > limit) {
+				const human = (n) => `${(n / 1024 / 1024).toFixed(1)} MB`;
+				const confirmMsg = `File is ${human(file.size)}, which exceeds the recommended limit of ${human(limit)} for ${category} files. Continue?`;
+				if (!window.confirm(confirmMsg)) {
+					setStatus("Idle");
+					return;
+				}
+			}
+
 			const messagePayload = {
 				action: "convert",
 				filename: file.name,
@@ -118,13 +200,23 @@ export default function App() {
 		}
 	}
 
-	const options = (() => {
+	const options = useMemo(() => {
 		if (!ext) return [];
-		if (ext === "json") return ["csv", "xlsx"];
-		if (ext === "csv") return ["json", "xlsx"];
-		if (ext === "xlsx" || ext === "xls") return ["csv", "json"];
-		return ["csv", "json", "xlsx"];
-	})();
+		const category = getFileCategory(ext);
+
+		if (category === "data") {
+			return DATA_EXTENSIONS.filter((e) => e !== ext && e !== "xls");
+		} else if (category === "image") {
+			return IMAGE_EXTENSIONS.filter((e) => e !== ext && e !== "svg");
+		} else if (category === "audio") {
+			return AUDIO_EXTENSIONS.filter((e) => e !== ext);
+		} else if (category === "video") {
+			return VIDEO_EXTENSIONS.filter((e) => e !== ext);
+		}
+		return [];
+	}, [ext]);
+
+	const acceptString = ALL_EXTENSIONS.map((e) => `.${e}`).join(",");
 
 	return (
 		<div className="min-h-screen bg-linear-to-br from-blue-50 to-indigo-100 flex items-center justify-center p-6">
@@ -140,8 +232,32 @@ export default function App() {
 			<div className="w-full max-w-2xl bg-white p-8 rounded-lg shadow-lg">
 				<h1 className="text-3xl font-bold mb-2 text-gray-800">ezconv</h1>
 				<p className="text-sm text-gray-500 mb-6">
-					Convert CSV, JSON, and XLSX files instantly. No uploads, no backend.
+					Convert images, audio, video, and data files instantly. No uploads, no
+					backend.
 				</p>
+
+				{ffmpegLoading && (
+					<div className="mb-4 p-3 bg-yellow-50 border-l-4 border-yellow-400 text-sm text-yellow-700">
+						<div className="flex items-center justify-between">
+							<div>
+								<div className="font-medium">
+									Loading FFmpeg (approx. 28 MB)
+								</div>
+								<div className="text-xs text-yellow-700">
+									First media conversion may take a while.
+								</div>
+							</div>
+							<div className="ml-4 w-40">
+								<div className="h-2 bg-yellow-200 rounded overflow-hidden">
+									<div
+										className="h-2 bg-yellow-400"
+										style={{ width: `${Math.round(ffmpegProgress * 100)}%` }}
+									/>
+								</div>
+							</div>
+						</div>
+					</div>
+				)}
 
 				<div className="space-y-4">
 					{/** biome-ignore lint/a11y/noStaticElementInteractions: false */}
@@ -175,12 +291,14 @@ export default function App() {
 								onChange={handleFile}
 								className="hidden"
 								type="file"
-								accept=".json,.csv,.xlsx,.xls,.txt"
+								accept={acceptString}
 								disabled={isConverting}
 							/>
 							<span className="text-blue-600 hover:underline ml-1">browse</span>
 						</label>
-						<p className="text-xs text-gray-500 mt-2">JSON, CSV, XLSX or XLS</p>
+						<p className="text-xs text-gray-500 mt-2">
+							Data, Images, Audio, or Video
+						</p>
 					</div>
 
 					{file && (
@@ -256,6 +374,37 @@ export default function App() {
 						<div className="text-sm text-gray-600 bg-gray-50 p-3 rounded">
 							<span className="font-medium">Status:</span> {status}
 						</div>
+					)}
+
+					{/* Logs and FFmpeg console */}
+					{[...VIDEO_EXTENSIONS, ...AUDIO_EXTENSIONS].includes(ext) && (
+						<>
+							<div className="flex items-center justify-between mt-2">
+								<div className="text-xs text-gray-500">FFmpeg logs</div>
+								<button
+									type="button"
+									className="text-xs text-blue-600 underline"
+									onClick={() => setShowLogs((s) => !s)}
+								>
+									{showLogs ? "Hide logs" : "Show logs"}
+								</button>
+							</div>
+
+							{showLogs && (
+								<div className="mt-2 bg-black text-white text-xs rounded p-2 max-h-40 overflow-auto">
+									{ffmpegLogs.length === 0 ? (
+										<div className="opacity-60">No logs yet.</div>
+									) : (
+										ffmpegLogs.map((l, i) => (
+											// biome-ignore lint/suspicious/noArrayIndexKey: no other way
+											<div key={i} className="whitespace-pre-wrap">
+												{l}
+											</div>
+										))
+									)}
+								</div>
+							)}
+						</>
 					)}
 
 					<div className="text-xs text-gray-400 border-t pt-4">
