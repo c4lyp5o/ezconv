@@ -205,13 +205,16 @@ export default function App() {
 		const category = getFileCategory(ext);
 
 		if (category === "data") {
-			return DATA_EXTENSIONS.filter((e) => e !== ext && e !== "xls");
+			// For data, it never makes sense to convert to the same type
+			return DATA_EXTENSIONS.filter((e) => e !== ext && e !== "xls"); // xls is write-only for now
 		} else if (category === "image") {
-			return IMAGE_EXTENSIONS.filter((e) => e !== ext && e !== "svg");
+			// For images, canvas conversion to same type is not useful
+			return IMAGE_EXTENSIONS.filter((e) => e !== ext && e !== "svg"); // svg is not a supported output
 		} else if (category === "audio") {
-			return AUDIO_EXTENSIONS.filter((e) => e !== ext);
+			// For audio/video, allow same-extension to allow for remuxing/repair
+			return AUDIO_EXTENSIONS;
 		} else if (category === "video") {
-			return VIDEO_EXTENSIONS.filter((e) => e !== ext);
+			return VIDEO_EXTENSIONS;
 		}
 		return [];
 	}, [ext]);
