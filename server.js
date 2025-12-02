@@ -1,7 +1,7 @@
 import { serve } from "bun";
 
 serve({
-	port: 3000,
+	port: 5000,
 	async fetch(req) {
 		const url = new URL(req.url);
 		let path = url.pathname;
@@ -19,4 +19,4 @@ serve({
 	},
 });
 
-console.log("Server running: http://localhost:3000");
+console.log("Server running: http://localhost:5000");
