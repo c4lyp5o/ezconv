@@ -130,29 +130,29 @@ const initFFmpeg = async () => {
 
 		await ff.load({ coreURL, wasmURL });
 
-		try {
-			ff.setLogger(({ type, message }) => {
-				postMessage({ status: "ffmpeg-log", message: `[${type}] ${message}` });
-			});
-		} catch (err) {
-			postMessage({
-				status: "log",
-				message: "ff.setLogger not supported",
-			});
-			console.warn("[worker] ff.setLogger not supported", err);
-		}
+		// try {
+		// 	ff.setLogger(({ type, message }) => {
+		// 		postMessage({ status: "ffmpeg-log", message: `[${type}] ${message}` });
+		// 	});
+		// } catch (err) {
+		// 	postMessage({
+		// 		status: "log",
+		// 		message: "ff.setLogger not supported",
+		// 	});
+		// 	console.warn("[worker] ff.setLogger not supported", err);
+		// }
 
-		try {
-			ff.setProgress(({ ratio }) => {
-				postMessage({ status: "ffmpeg-progress", ratio });
-			});
-		} catch (err) {
-			postMessage({
-				status: "log",
-				message: "ff.setProgress not supported",
-			});
-			console.warn("[worker] ff.setProgress not supported", err);
-		}
+		// try {
+		// 	ff.setProgress(({ ratio }) => {
+		// 		postMessage({ status: "ffmpeg-progress", ratio });
+		// 	});
+		// } catch (err) {
+		// 	postMessage({
+		// 		status: "log",
+		// 		message: "ff.setProgress not supported",
+		// 	});
+		// 	console.warn("[worker] ff.setProgress not supported", err);
+		// }
 
 		postMessage({ status: "ffmpeg-ready" });
 		console.log("[worker] FFmpeg ready");
