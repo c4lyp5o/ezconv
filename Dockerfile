@@ -13,7 +13,6 @@ RUN bun install
 COPY client ./client
 RUN cd client && bun install && bun run build
 
-
 # ============================
 # Stage 2: Production
 # ============================
