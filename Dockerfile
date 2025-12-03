@@ -31,6 +31,9 @@ RUN bun install --production
 # Copy env
 COPY .env ./
 
+# Copy server
+COPY server.js ./
+
 # Copy built client bundle
 COPY --from=builder /app/dist ./dist
 
