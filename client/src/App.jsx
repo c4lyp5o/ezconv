@@ -222,7 +222,7 @@ export default function App() {
 	const acceptString = ALL_EXTENSIONS.map((e) => `.${e}`).join(",");
 
 	return (
-		<div className="min-h-screen bg-linear-to-br from-blue-50 to-indigo-100 flex items-center justify-center p-6">
+		<div className="min-h-screen bg-linear-to-br from-gray-900 to-slate-800 flex items-center justify-center p-6 text-gray-300">
 			{toast && (
 				<div className="fixed top-6 right-6 z-50">
 					<Toast
@@ -232,9 +232,11 @@ export default function App() {
 					/>
 				</div>
 			)}
-			<div className="w-full max-w-2xl bg-white p-8 rounded-lg shadow-lg">
-				<h1 className="text-3xl font-bold mb-2 text-gray-800">ezconv</h1>
-				<p className="text-sm text-gray-500 mb-6">
+			<div className="w-full max-w-2xl bg-gray-800 p-8 rounded-lg shadow-lg">
+				<h1 className="text-3xl font-bold mb-2 text-gray-100">
+					ezconv - convert anything!
+				</h1>
+				<p className="text-sm text-gray-400 mb-6">
 					Convert images, audio, video, and data files instantly. No uploads, no
 					backend.
 				</p>
@@ -280,14 +282,14 @@ export default function App() {
 						}}
 						className={`border-2 border-dashed rounded-lg p-8 text-center transition-colors ${
 							isDragging
-								? "border-blue-500 bg-blue-50"
-								: "border-gray-300 bg-gray-50"
+								? "border-blue-500 bg-blue-900/20"
+								: "border-gray-600 bg-gray-700/50"
 						}
 						${isConverting ? " opacity-60 pointer-events-none" : ""}`}
 					>
 						<div className="mb-3 text-3xl">📄</div>
 						<label className="block cursor-pointer">
-							<span className="text-sm font-medium text-gray-700">
+							<span className="text-sm font-medium text-gray-300">
 								Drag & drop a file here or
 							</span>
 							<input
@@ -299,19 +301,19 @@ export default function App() {
 							/>
 							<span className="text-blue-600 hover:underline ml-1">browse</span>
 						</label>
-						<p className="text-xs text-gray-500 mt-2">
+						<p className="text-xs text-gray-400 mt-2">
 							Data, Images, Audio, or Video
 						</p>
 					</div>
 
 					{file && (
-						<div className="bg-blue-50 border border-blue-200 rounded-lg p-4">
+						<div className="bg-gray-700 border border-gray-600 rounded-lg p-4">
 							<div className="flex items-center justify-between">
 								<div>
-									<p className="text-sm font-medium text-gray-800">
+									<p className="text-sm font-medium text-gray-200">
 										{file.name}
 									</p>
-									<p className="text-xs text-gray-500">
+									<p className="text-xs text-gray-400">
 										{(file.size / 1024).toFixed(2)} KB · Detected:{" "}
 										<span className="font-semibold">{ext.toUpperCase()}</span>
 									</p>
@@ -319,7 +321,7 @@ export default function App() {
 								<button
 									type="button"
 									onClick={handleReset}
-									className="text-gray-400 hover:text-gray-600"
+									className="text-gray-500 hover:text-gray-300"
 								>
 									✕
 								</button>
@@ -332,13 +334,13 @@ export default function App() {
 							<div className="flex-1">
 								<label
 									htmlFor="target-select"
-									className="text-sm text-gray-600 font-medium block mb-2"
+									className="text-sm text-gray-300 font-medium block mb-2"
 								>
 									Convert to
 								</label>
 								<select
 									id="target-select"
-									className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+									className="w-full border border-gray-600 bg-gray-700 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
 									value={target}
 									onChange={(e) => setTarget(e.target.value)}
 									disabled={isConverting}
@@ -366,7 +368,7 @@ export default function App() {
 						<button
 							type="button"
 							onClick={handleReset}
-							className="px-4 py-2 border border-gray-300 rounded-lg hover:bg-gray-50 transition-colors"
+							className="px-4 py-2 border border-gray-600 rounded-lg hover:bg-gray-700 transition-colors"
 							disabled={isConverting}
 						>
 							Reset
@@ -374,7 +376,7 @@ export default function App() {
 					</div>
 
 					{status !== "Idle" && (
-						<div className="text-sm text-gray-600 bg-gray-50 p-3 rounded">
+						<div className="text-sm text-gray-300 bg-gray-700/50 p-3 rounded">
 							<span className="font-medium">Status:</span> {status}
 						</div>
 					)}
@@ -383,7 +385,7 @@ export default function App() {
 					{[...VIDEO_EXTENSIONS, ...AUDIO_EXTENSIONS].includes(ext) && (
 						<>
 							<div className="flex items-center justify-between mt-2">
-								<div className="text-xs text-gray-500">FFmpeg logs</div>
+								<div className="text-xs text-gray-400">FFmpeg logs</div>
 								<button
 									type="button"
 									className="text-xs text-blue-600 underline"
@@ -410,7 +412,7 @@ export default function App() {
 						</>
 					)}
 
-					<div className="text-xs text-gray-400 border-t pt-4">
+					<div className="text-xs text-gray-500 border-t border-gray-700 pt-4">
 						🔒 Files never leave your browser. Conversion runs in a Web Worker
 						for instant results.
 					</div>
