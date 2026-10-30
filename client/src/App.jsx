@@ -41,7 +41,8 @@ export default function App() {
 	const [isDragging, setIsDragging] = useState(false);
 	const workerRef = useRef(null);
 
-	const isConverting = status.toLowerCase().includes("convert");
+	// explicit busy flag: status text is display-only, the UI locks off this
+	const [isConverting, setIsConverting] = useState(false);
 
 	// UI flags
 	const [ffmpegLoading, setFfmpegLoading] = useState(false);
@@ -95,6 +96,7 @@ export default function App() {
 					break;
 				case "done": {
 					setStatus("Done");
+					setIsConverting(false);
 					const note = warnings?.length ? ` (${warnings.join("; ")})` : "";
 					setToast({
 						message: `✓ Conversion successful!${note}`,
@@ -115,6 +117,7 @@ export default function App() {
 				}
 				case "error":
 					setStatus("Error");
+					setIsConverting(false);
 					setToast({ message: `✗ Error: ${message}`, type: "error" });
 					break;
 			}
@@ -162,6 +165,7 @@ export default function App() {
 
 		if (!target) return;
 
+		setIsConverting(true);
 		try {
 			setStatus("Reading file...");
 			const category = getFileCategory(ext);
@@ -179,6 +183,7 @@ export default function App() {
 				const confirmMsg = `File is ${human(file.size)}, which exceeds the recommended limit of ${human(limit)} for ${category} files. Continue?`;
 				if (!window.confirm(confirmMsg)) {
 					setStatus("Idle");
+					setIsConverting(false);
 					return;
 				}
 			}
@@ -203,6 +208,7 @@ export default function App() {
 			workerRef.current.postMessage(messagePayload, transferList);
 		} catch (err) {
 			setStatus(`Error reading file: ${err.message}`);
+			setIsConverting(false);
 		}
 	}
 

@@ -290,13 +290,8 @@ const convertMedia = async (arrayBuffer, fromExt, toExt) => {
 	}
 };
 
-self.onmessage = async (e) => {
-	const { action } = e.data;
-	if (action !== "convert") return;
-
+const handleConvert = async ({ filename, target, ext, text, arrayBuffer }) => {
 	try {
-		const { filename, target, ext, text, arrayBuffer } = e.data;
-
 		const outName = `${filename.replace(/\.[^.]+$/, "")}.${target}`;
 		const warnings = [];
 		let mime = "application/octet-stream";
@@ -422,4 +417,14 @@ self.onmessage = async (e) => {
 		postMessage({ status: "error", message: err.message || String(err) });
 		console.error("[worker] Conversion error", err);
 	}
+};
+
+// One conversion at a time: later messages queue behind the running one,
+// so two converts can never interleave on the shared ffmpeg/filesystem state
+let queue = Promise.resolve();
+
+self.onmessage = (e) => {
+	const { action } = e.data;
+	if (action !== "convert") return;
+	queue = queue.then(() => handleConvert(e.data));
 };

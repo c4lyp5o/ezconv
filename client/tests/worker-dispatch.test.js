@@ -11,11 +11,18 @@ beforeAll(async () => {
 	await import("../src/worker.js");
 });
 
-// Drive the real self.onmessage dispatch and return non-log messages
-const drive = async (data) => {
+// Drive the real self.onmessage dispatch and return non-log messages.
+// onmessage queues work (no return value), so poll for the worker's answer.
+const drive = async (data, timeoutMs = 5000) => {
 	sent.length = 0;
-	await self.onmessage({ data: { action: "convert", ...data } });
-	return sent.filter((m) => m.status !== "log");
+	self.onmessage({ data: { action: "convert", ...data } });
+	const t0 = Date.now();
+	while (Date.now() - t0 < timeoutMs) {
+		const answered = sent.filter((m) => m.status !== "log");
+		if (answered.length) return answered;
+		await new Promise((r) => setTimeout(r, 5));
+	}
+	throw new Error("worker did not answer in time");
 };
 
 const makeWorkbook = (sheets) => {
@@ -61,6 +68,38 @@ describe("worker dispatch: spreadsheet conversions", () => {
 		expect(out).toHaveLength(1);
 		expect(out[0].status).toBe("error");
 		expect(out[0].message).toContain("Unsupported conversion: csv to csv");
+	});
+
+	it("serializes queued conversions in arrival order", async () => {
+		sent.length = 0;
+		self.onmessage({
+			data: {
+				action: "convert",
+				filename: "first.json",
+				target: "csv",
+				ext: "json",
+				text: '[{"a": 1}]',
+			},
+		});
+		self.onmessage({
+			data: {
+				action: "convert",
+				filename: "second.json",
+				target: "csv",
+				ext: "json",
+				text: '[{"a": 2}]',
+			},
+		});
+
+		const t0 = Date.now();
+		while (
+			sent.filter((m) => m.status === "done").length < 2 &&
+			Date.now() - t0 < 5000
+		) {
+			await new Promise((r) => setTimeout(r, 5));
+		}
+		const dones = sent.filter((m) => m.status === "done");
+		expect(dones.map((m) => m.filename)).toEqual(["first.csv", "second.csv"]);
 	});
 });
 
