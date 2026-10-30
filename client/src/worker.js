@@ -10,6 +10,13 @@ const MEDIA_EXTENSIONS = [...AUDIO_EXTENSIONS, ...VIDEO_EXTENSIONS];
 // Singleton instance for FFmpeg
 let ffmpegInstance = null;
 
+// tag every worker message with the active job id — the queue runs one at a
+// time, so the UI can attribute answers to the right file
+let currentJobId = null;
+const post = (msg, transfer) => {
+	postMessage({ ...msg, jobId: currentJobId }, transfer || []);
+};
+
 // Serialize a workbook to xlsx bytes (exact slice — no slack from pooled buffers)
 const writeWorkbookFile = (wb) => {
 	const data = XLSX.write(wb, { bookType: "xlsx", type: "array" });
@@ -58,8 +65,8 @@ const initFFmpeg = async () => {
 	if (ffmpegInstance) return ffmpegInstance;
 
 	try {
-		postMessage({ status: "ffmpeg-loading" });
-		postMessage({ status: "log", message: "Loading FFmpeg core..." });
+		post({ status: "ffmpeg-loading" });
+		post({ status: "log", message: "Loading FFmpeg core..." });
 
 		const ff = new FFmpeg();
 		await ff.load({ coreURL, wasmURL });
@@ -67,13 +74,13 @@ const initFFmpeg = async () => {
 		// real event API: setLogger/setProgress only exist on the inner ffmpeg,
 		// the public class emits "log" and "progress" events
 		ff.on("log", ({ type, message }) => {
-			postMessage({ status: "ffmpeg-log", message: `[${type}] ${message}` });
+			post({ status: "ffmpeg-log", message: `[${type}] ${message}` });
 		});
 		ff.on("progress", ({ progress }) => {
-			postMessage({ status: "ffmpeg-progress", ratio: progress });
+			post({ status: "ffmpeg-progress", ratio: progress });
 		});
 
-		postMessage({ status: "ffmpeg-ready" });
+		post({ status: "ffmpeg-ready" });
 		console.log("[worker] FFmpeg ready");
 		ffmpegInstance = ff;
 		return ffmpegInstance;
@@ -91,7 +98,7 @@ const convertMedia = async (arrayBuffer, fromExt, toExt) => {
 		const inputName = `input.${fromExt}`;
 		const outputName = `output.${toExt}`;
 
-		postMessage({ status: "log", message: `Writing ${inputName}` });
+		post({ status: "log", message: `Writing ${inputName}` });
 
 		await ff.writeFile(inputName, new Uint8Array(arrayBuffer));
 
@@ -160,7 +167,7 @@ const convertMedia = async (arrayBuffer, fromExt, toExt) => {
 			args.push(outputName);
 		}
 
-		postMessage({
+		post({
 			status: "log",
 			message: `Running ffmpeg ${args.join(" ")}`,
 		});
@@ -171,7 +178,7 @@ const convertMedia = async (arrayBuffer, fromExt, toExt) => {
 			throw err;
 		}
 
-		postMessage({ status: "log", message: `Reading ${outputName}` });
+		post({ status: "log", message: `Reading ${outputName}` });
 		let data;
 		try {
 			data = await ff.readFile(outputName);
@@ -181,7 +188,7 @@ const convertMedia = async (arrayBuffer, fromExt, toExt) => {
 		}
 
 		const outBuffer = data.buffer;
-		postMessage({
+		post({
 			status: "log",
 			message: `Conversion finished: ${outputName} (${outBuffer.byteLength} bytes)`,
 		});
@@ -192,7 +199,8 @@ const convertMedia = async (arrayBuffer, fromExt, toExt) => {
 	}
 };
 
-const handleConvert = async ({ filename, target, ext, text, arrayBuffer, quality }) => {
+const handleConvert = async ({ filename, target, ext, text, arrayBuffer, quality, jobId }) => {
+	currentJobId = jobId ?? null;
 	try {
 		const outName = `${filename.replace(/\.[^.]+$/, "")}.${target}`;
 		const warnings = [];
@@ -305,11 +313,9 @@ const handleConvert = async ({ filename, target, ext, text, arrayBuffer, quality
 		}
 
 		// Transfer the array buffer back to the main thread
-		postMessage({ status: "done", filename: outName, buffer: outBuffer, mime, warnings }, [
-			outBuffer,
-		]);
+		post({ status: "done", filename: outName, buffer: outBuffer, mime, warnings }, [outBuffer]);
 	} catch (err) {
-		postMessage({ status: "error", message: err.message || String(err) });
+		post({ status: "error", message: err.message || String(err) });
 		console.error("[worker] Conversion error", err);
 	}
 };

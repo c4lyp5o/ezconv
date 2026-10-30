@@ -98,6 +98,34 @@ describe("worker dispatch: spreadsheet conversions", () => {
 	});
 });
 
+describe("worker dispatch: job correlation", () => {
+	it("echoes the job id on success", async () => {
+		const out = await drive({
+			jobId: "job-7",
+			filename: "a.json",
+			target: "csv",
+			ext: "json",
+			text: '[{"a": 1}]',
+		});
+
+		expect(out[0].status).toBe("done");
+		expect(out[0].jobId).toBe("job-7");
+	});
+
+	it("echoes the job id on errors too", async () => {
+		const out = await drive({
+			jobId: "job-8",
+			filename: "t.csv",
+			target: "csv",
+			ext: "csv",
+			text: "a,b",
+		});
+
+		expect(out[0].status).toBe("error");
+		expect(out[0].jobId).toBe("job-8");
+	});
+});
+
 describe("worker dispatch: json input normalization", () => {
 	it("converts a plain-object json to a one-row csv", async () => {
 		const out = await drive({
