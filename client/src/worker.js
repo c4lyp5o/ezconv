@@ -60,19 +60,14 @@ const initFFmpeg = async () => {
 		const ff = new FFmpeg();
 		await ff.load({ coreURL, wasmURL });
 
-		try {
-			ff.setLogger(({ type, message }) => {
-				postMessage({ status: "ffmpeg-log", message: `[${type}] ${message}` });
-			});
-			ff.setProgress(({ ratio }) => {
-				postMessage({ status: "ffmpeg-progress", ratio });
-			});
-		} catch {
-			postMessage({
-				status: "log",
-				message: "ffmpeg progress hooks unavailable",
-			});
-		}
+		// real event API: setLogger/setProgress only exist on the inner ffmpeg,
+		// the public class emits "log" and "progress" events
+		ff.on("log", ({ type, message }) => {
+			postMessage({ status: "ffmpeg-log", message: `[${type}] ${message}` });
+		});
+		ff.on("progress", ({ progress }) => {
+			postMessage({ status: "ffmpeg-progress", ratio: progress });
+		});
 
 		postMessage({ status: "ffmpeg-ready" });
 		console.log("[worker] FFmpeg ready");

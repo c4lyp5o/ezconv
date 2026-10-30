@@ -269,14 +269,6 @@ export default function App() {
 									First media conversion may take a while.
 								</div>
 							</div>
-							<div className="ml-4 w-40">
-								<div className="h-2 bg-yellow-200 rounded overflow-hidden">
-									<div
-										className="h-2 bg-yellow-400"
-										style={{ width: `${Math.round(ffmpegProgress * 100)}%` }}
-									/>
-								</div>
-							</div>
 						</div>
 					</div>
 				)}
@@ -387,6 +379,9 @@ export default function App() {
 					{status !== "Idle" && (
 						<div className="text-sm text-gray-300 bg-gray-700/50 p-3 rounded">
 							<span className="font-medium">Status:</span> {status}
+							{isConverting && ffmpegProgress > 0 && (
+								<span> {Math.round(ffmpegProgress * 100)}%</span>
+							)}
 						</div>
 					)}
 
