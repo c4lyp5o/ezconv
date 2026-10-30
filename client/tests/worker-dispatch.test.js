@@ -119,3 +119,53 @@ describe("worker dispatch: json input normalization", () => {
 		expect(out[0].message).toContain("JSON must be");
 	});
 });
+
+describe("worker dispatch: data-loss warnings", () => {
+	const twoSheets = () => {
+		const wb = makeWorkbook([
+			["Sheet1", [{ a: 1 }]],
+			["Sheet2", [{ b: 2 }]],
+		]);
+		return new Uint8Array(XLSX.write(wb, { bookType: "xls", type: "array" }))
+			.buffer;
+	};
+
+	it("warns when a multi-sheet workbook exports only its first sheet", async () => {
+		const out = await drive({
+			filename: "book.xls",
+			target: "json",
+			ext: "xls",
+			arrayBuffer: twoSheets(),
+		});
+
+		expect(out[0].status).toBe("done");
+		expect(out[0].warnings.join(" ")).toContain("2 sheets");
+		expect(out[0].warnings.join(" ")).toContain("Sheet1");
+	});
+
+	it("does not warn when every sheet is preserved on xlsx target", async () => {
+		const out = await drive({
+			filename: "book.xls",
+			target: "xlsx",
+			ext: "xls",
+			arrayBuffer: twoSheets(),
+		});
+
+		expect(out[0].status).toBe("done");
+		expect(out[0].warnings).toEqual([]);
+	});
+
+	it("stays quiet for single-sheet workbooks", async () => {
+		const wb = makeWorkbook([["Only", [{ a: 1 }]]]);
+		const arr = new Uint8Array(XLSX.write(wb, { bookType: "xls", type: "array" }));
+		const out = await drive({
+			filename: "one.xls",
+			target: "csv",
+			ext: "xls",
+			arrayBuffer: arr.buffer,
+		});
+
+		expect(out[0].status).toBe("done");
+		expect(out[0].warnings).toEqual([]);
+	});
+});

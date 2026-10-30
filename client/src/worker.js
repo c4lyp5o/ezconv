@@ -298,6 +298,7 @@ self.onmessage = async (e) => {
 		const { filename, target, ext, text, arrayBuffer } = e.data;
 
 		const outName = `${filename.replace(/\.[^.]+$/, "")}.${target}`;
+		const warnings = [];
 		let mime = "application/octet-stream";
 		let outBuffer;
 
@@ -359,6 +360,12 @@ self.onmessage = async (e) => {
 			const wb = XLSX.read(ab, { type: "array" });
 			const first = wb.SheetNames[0];
 			const ws = wb.Sheets[first];
+			// xlsx target re-emits every sheet; json/csv can only carry one
+			if (target !== "xlsx" && wb.SheetNames.length > 1) {
+				warnings.push(
+					`${wb.SheetNames.length} sheets found — only "${first}" was exported`,
+				);
+			}
 			if (target === "json") {
 				const json = XLSX.utils.sheet_to_json(ws, { defval: null });
 				const jsonStr = JSON.stringify(json, null, 2);
@@ -374,6 +381,9 @@ self.onmessage = async (e) => {
 			}
 		} else if (IMAGE_EXTENSIONS.includes(ext)) {
 			// Convert image format using Canvas API
+			if (ext === "gif") {
+				warnings.push("gif animation flattened to a single frame");
+			}
 			outBuffer = await convertImage(arrayBuffer, ext, target);
 			mime = imageMimeFor(target);
 		} else if (MEDIA_EXTENSIONS.includes(ext)) {
@@ -405,7 +415,7 @@ self.onmessage = async (e) => {
 
 		// Transfer the array buffer back to the main thread
 		postMessage(
-			{ status: "done", filename: outName, buffer: outBuffer, mime },
+			{ status: "done", filename: outName, buffer: outBuffer, mime, warnings },
 			[outBuffer],
 		);
 	} catch (err) {

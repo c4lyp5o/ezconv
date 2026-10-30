@@ -63,7 +63,8 @@ export default function App() {
 		});
 		workerRef.current = w;
 		w.onmessage = (e) => {
-			const { status, message, ratio, buffer, mime, filename } = e.data;
+			const { status, message, ratio, buffer, mime, filename, warnings } =
+				e.data;
 
 			switch (status) {
 				case "ffmpeg-loading":
@@ -94,7 +95,11 @@ export default function App() {
 					break;
 				case "done": {
 					setStatus("Done");
-					setToast({ message: "✓ Conversion successful!", type: "success" });
+					const note = warnings?.length ? ` (${warnings.join("; ")})` : "";
+					setToast({
+						message: `✓ Conversion successful!${note}`,
+						type: "success",
+					});
 					const blob = new Blob([buffer], {
 						type: mime || "application/octet-stream",
 					});
