@@ -1,5 +1,5 @@
 export default function DropZone({
-	onFile,
+	onFiles,
 	disabled,
 	isDragging,
 	setIsDragging,
@@ -22,8 +22,7 @@ export default function DropZone({
 					if (disabled) return;
 					e.preventDefault();
 					setIsDragging(false);
-					const f = e.dataTransfer?.files?.[0];
-					if (f) onFile(f);
+					if (e.dataTransfer?.files?.length) onFiles(e.dataTransfer.files);
 				}}
 				className={`border-2 border-dashed rounded-lg p-8 text-center transition-colors ${
 					isDragging ? "border-blue-500 bg-blue-900/20" : "border-gray-600 bg-gray-700/50"
@@ -32,15 +31,15 @@ export default function DropZone({
 			>
 				<div className="mb-3 text-3xl">📄</div>
 				<label className="block cursor-pointer">
-					<span className="text-sm font-medium text-gray-300">Drag & drop a file here or</span>
+					<span className="text-sm font-medium text-gray-300">Drag & drop files here or</span>
 					<input
 						ref={inputRef}
 						onChange={(e) => {
-							const f = e.target?.files?.[0];
-							if (f) onFile(f);
+							if (e.target?.files?.length) onFiles(e.target.files);
 						}}
 						className="hidden"
 						type="file"
+						multiple
 						accept={acceptString}
 						disabled={disabled}
 					/>

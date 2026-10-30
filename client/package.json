@@ -16,6 +16,7 @@
 		"@ffmpeg/core": "0.12.10",
 		"@ffmpeg/ffmpeg": "^0.12.10",
 		"@tailwindcss/vite": "^4.1.17",
+		"jszip": "^3.10.2",
 		"papaparse": "^5.4.1",
 		"react": "^19.2.0",
 		"react-dom": "^19.2.0",
