@@ -1,0 +1,16 @@
+# Portable dev/test compose. The HOME BOX deployment lives in ~/own/compose.yml
+# (traefik labels, hostnames) — this file stays hostname-free and portable.
+services:
+  ezconv:
+    # CI publishes ghcr.io/c4lyp5o/ezconv on main (latest/main) and development;
+    # `build: .` lets you run the working tree locally instead.
+    image: ghcr.io/c4lyp5o/ezconv:latest
+    build: .
+    restart: unless-stopped
+    ports:
+      - "${EZCONV_PORT:-5000}:5000"
+    environment:
+      - PORT=5000
+      # the published port is the boundary inside a container
+      - HOST=0.0.0.0
+      - TZ=Asia/Kuala_Lumpur

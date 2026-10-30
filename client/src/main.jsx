@@ -8,3 +8,10 @@ createRoot(document.getElementById("root")).render(
 		<App />
 	</StrictMode>,
 );
+
+// offline support: cache the shell and assets (including the ffmpeg core)
+if ("serviceWorker" in navigator) {
+	window.addEventListener("load", () => {
+		navigator.serviceWorker.register("/sw.js").catch(() => {});
+	});
+}
