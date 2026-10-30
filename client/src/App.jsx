@@ -59,11 +59,16 @@ export default function App() {
 	const workerRef = useRef(null);
 	// the worker's onmessage closes over the first render — carry sizes via ref
 	const inputSizeRef = useRef(0);
+	const inputRef = useRef(null);
+	// latest handlers/state for the stable window listeners
+	const liveRef = useRef({});
 
 	// explicit busy flag: status text is display-only, the UI locks off this
 	const [isConverting, setIsConverting] = useState(false);
 	// encoder quality for lossy image targets (jpeg/webp), 0.50 - 1.00
 	const [quality, setQuality] = useState(0.92);
+
+	liveRef.current = { handleFile, handleConvert, isConverting };
 
 	// UI flags
 	const [ffmpegLoading, setFfmpegLoading] = useState(false);
@@ -152,6 +157,35 @@ export default function App() {
 		};
 	}, []);
 
+	// clipboard paste + keyboard shortcuts: Ctrl+O browse, Enter convert
+	useEffect(() => {
+		const onPaste = (e) => {
+			if (liveRef.current.isConverting) return;
+			const f = e.clipboardData?.files?.[0];
+			if (f) liveRef.current.handleFile({ dataTransfer: { files: [f] } });
+		};
+		const onKey = (e) => {
+			if (e.key === "o" && (e.ctrlKey || e.metaKey)) {
+				e.preventDefault();
+				inputRef.current?.click();
+				return;
+			}
+			if (e.key !== "Enter" || e.ctrlKey || e.metaKey || e.shiftKey) return;
+			// let buttons and form controls handle their own Enter
+			const tag = e.target?.tagName;
+			if (tag === "BUTTON" || tag === "SELECT" || tag === "TEXTAREA") return;
+			if (tag === "INPUT" && e.target?.type !== "range") return;
+			e.preventDefault();
+			liveRef.current.handleConvert();
+		};
+		window.addEventListener("paste", onPaste);
+		window.addEventListener("keydown", onKey);
+		return () => {
+			window.removeEventListener("paste", onPaste);
+			window.removeEventListener("keydown", onKey);
+		};
+	}, []);
+
 	function handleReset() {
 		setFile(null);
 		setExt("");
@@ -199,6 +233,7 @@ export default function App() {
 
 	async function handleConvert() {
 		if (!file || !workerRef.current) return;
+		if (isConverting) return;
 
 		if (!target) return;
 
@@ -329,6 +364,7 @@ export default function App() {
 						<label className="block cursor-pointer">
 							<span className="text-sm font-medium text-gray-300">Drag & drop a file here or</span>
 							<input
+								ref={inputRef}
 								onChange={handleFile}
 								className="hidden"
 								type="file"
