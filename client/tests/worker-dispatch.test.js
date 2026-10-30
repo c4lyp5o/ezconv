@@ -63,3 +63,59 @@ describe("worker dispatch: spreadsheet conversions", () => {
 		expect(out[0].message).toContain("Unsupported conversion: csv to csv");
 	});
 });
+
+describe("worker dispatch: json input normalization", () => {
+	it("converts a plain-object json to a one-row csv", async () => {
+		const out = await drive({
+			filename: "obj.json",
+			target: "csv",
+			ext: "json",
+			text: '{"a": 1, "b": 2}',
+		});
+
+		expect(out[0].status).toBe("done");
+		const csv = new TextDecoder().decode(out[0].buffer);
+		expect(csv).toContain("a,b");
+		expect(csv).toContain("1,2");
+	});
+
+	it("converts a plain-object json to a one-row xlsx", async () => {
+		const out = await drive({
+			filename: "obj.json",
+			target: "xlsx",
+			ext: "json",
+			text: '{"a": 1}',
+		});
+
+		expect(out[0].status).toBe("done");
+		const back = XLSX.read(out[0].buffer, { type: "array" });
+		const rows = XLSX.utils.sheet_to_json(back.Sheets[back.SheetNames[0]]);
+		expect(rows).toEqual([{ a: 1 }]);
+	});
+
+	it("still converts arrays of rows", async () => {
+		const out = await drive({
+			filename: "a.json",
+			target: "csv",
+			ext: "json",
+			text: '[{"a": 1}, {"a": 2}]',
+		});
+
+		expect(out[0].status).toBe("done");
+		const csv = new TextDecoder().decode(out[0].buffer);
+		expect(csv).toContain("1");
+		expect(csv).toContain("2");
+	});
+
+	it("rejects scalar json instead of faking an output", async () => {
+		const out = await drive({
+			filename: "n.json",
+			target: "csv",
+			ext: "json",
+			text: "5",
+		});
+
+		expect(out[0].status).toBe("error");
+		expect(out[0].message).toContain("JSON must be");
+	});
+});

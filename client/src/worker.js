@@ -312,12 +312,25 @@ self.onmessage = async (e) => {
 			} catch (err) {
 				throw new Error(`Invalid JSON input: ${err.message || String(err)}`);
 			}
+			// normalize to a row array: a plain object becomes one row instead
+			// of silently producing an empty "successful" output
+			let rows;
+			if (Array.isArray(json)) {
+				rows = json;
+			} else if (json && typeof json === "object") {
+				rows = [json];
+			} else {
+				throw new Error("JSON must be an object or an array of objects");
+			}
 			if (target === "csv") {
-				const csv = Papa.unparse(json);
+				const csv = Papa.unparse(rows);
+				if (rows.length > 0 && !csv) {
+					throw new Error("JSON produced an empty CSV");
+				}
 				mime = "text/csv;charset=utf-8;";
 				outBuffer = new TextEncoder().encode(csv).buffer;
 			} else if (target === "xlsx") {
-				({ mime, outBuffer } = createXlsxFile(XLSX.utils.json_to_sheet(json)));
+				({ mime, outBuffer } = createXlsxFile(XLSX.utils.json_to_sheet(rows)));
 			}
 		} else if (ext === "csv") {
 			const csvText =
