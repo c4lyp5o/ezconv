@@ -68,6 +68,12 @@ docker build -t ezconv .
 docker run -p 5000:5000 ezconv
 ```
 
+Or with Compose (portable dev file — `compose.yml`):
+
+```bash
+docker compose up -d        # GHCR image; `--build` to build the working tree
+```
+
 ## 🌐 Serving & LAN
 
 The static server binds **loopback by default**. Serve it to your LAN (e.g. test-drive from a phone) with the `HOST` env var; the port comes from `PORT`:
