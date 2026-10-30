@@ -8,7 +8,7 @@ export default defineConfig({
 		port: 3000,
 	},
 	optimizeDeps: {
-		exclude: ["@ffmpeg/ffmpeg", "@ffmpeg/util"],
+		exclude: ["@ffmpeg/ffmpeg"],
 	},
 	plugins: [
 		react({

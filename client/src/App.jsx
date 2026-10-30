@@ -261,7 +261,8 @@ export default function App() {
 						<div className="flex items-center justify-between">
 							<div>
 								<div className="font-medium">
-									Loading FFmpeg (approx. 28 MB)
+									Loading FFmpeg core (~28 MB, served from this
+									server)
 								</div>
 								<div className="text-xs text-yellow-700">
 									First media conversion may take a while.

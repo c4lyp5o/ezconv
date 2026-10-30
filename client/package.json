@@ -12,8 +12,8 @@
 		"test:ui": "vitest --ui"
 	},
 	"dependencies": {
+		"@ffmpeg/core": "0.12.10",
 		"@ffmpeg/ffmpeg": "^0.12.10",
-		"@ffmpeg/util": "^0.12.2",
 		"@tailwindcss/vite": "^4.1.17",
 		"papaparse": "^5.4.1",
 		"react": "^19.2.0",

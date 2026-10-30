@@ -1,5 +1,8 @@
 import Papa from "papaparse";
 import * as XLSX from "xlsx";
+import { FFmpeg } from "@ffmpeg/ffmpeg";
+import coreURL from "@ffmpeg/core?url";
+import wasmURL from "@ffmpeg/core/wasm?url";
 import {
 	IMAGE_EXTENSIONS,
 	AUDIO_EXTENSIONS,
@@ -53,114 +56,31 @@ const convertImage = async (arrayBuffer, fromExt, toExt) => {
 	}
 };
 
-// Initialize FFmpeg on first use
+// Initialize FFmpeg on first use — the core files are bundled assets served
+// by our own server (no third-party CDN fetch, works offline)
 const initFFmpeg = async () => {
 	if (ffmpegInstance) return ffmpegInstance;
 
 	try {
 		postMessage({ status: "ffmpeg-loading" });
-		postMessage({ status: "log", message: "Initializing FFmpeg..." });
-		console.log("[worker] Initializing FFmpeg...");
+		postMessage({ status: "log", message: "Loading FFmpeg core..." });
 
-		let mod = null;
-		try {
-			mod = await import("@ffmpeg/ffmpeg");
-			postMessage({
-				status: "log",
-				message: "@ffmpeg/ffmpeg imported successfully",
-			});
-			console.log("[worker] @ffmpeg/ffmpeg imported successfully");
-		} catch (err) {
-			postMessage({
-				status: "log",
-				message: "@ffmpeg/ffmpeg import failed",
-			});
-			console.error("[worker] @ffmpeg/ffmpeg import failed", err);
-			throw err;
-		}
-
-		// Try to import util helpers (fetchFile, toBlobURL) if available
-		let util = null;
-		try {
-			util = await import("@ffmpeg/util");
-			postMessage({
-				status: "log",
-				message: "@ffmpeg/util available",
-			});
-			console.log("[worker] @ffmpeg/util imported successfully");
-		} catch (err) {
-			postMessage({
-				status: "log",
-				message: "@ffmpeg/util not available",
-			});
-			console.warn("[worker] @ffmpeg/util import failed", err);
-		}
-
-		// Diagnostic: post module keys to help debugging import shape
-		try {
-			postMessage({
-				status: "log",
-				message: `@ffmpeg/ffmpeg import keys: ${Object.keys(mod).join(",")}`,
-			});
-			console.log("[worker] @ffmpeg/ffmpeg import keys", Object.keys(mod));
-		} catch (err) {
-			postMessage({
-				status: "log",
-				message: `@ffmpeg/ffmpeg import keys unavailable`,
-			});
-			console.warn("[worker] failed to get @ffmpeg/ffmpeg keys", err);
-		}
-
-		const FFmpegClass =
-			mod.FFmpeg || mod.default?.FFmpeg || mod.default || null;
-
-		let ff = null;
-
-		const baseURL =
-			"https://cdn.jsdelivr.net/npm/@ffmpeg/core@0.12.10/dist/esm";
-
-		postMessage({
-			status: "log",
-			message: "Pulling FFmpeg",
-		});
-		ff = new FFmpegClass();
-		const coreURL = util?.toBlobURL
-			? await util
-					.toBlobURL(`${baseURL}/ffmpeg-core.js`, "text/javascript")
-					.catch(() => `${baseURL}/ffmpeg-core.js`)
-			: `${baseURL}/ffmpeg-core.js`;
-
-		const wasmURL = util?.toBlobURL
-			? await util
-					.toBlobURL(`${baseURL}/ffmpeg-core.wasm`, "application/wasm")
-					.catch(() => `${baseURL}/ffmpeg-core.wasm`)
-			: `${baseURL}/ffmpeg-core.wasm`;
-
+		const ff = new FFmpeg();
 		await ff.load({ coreURL, wasmURL });
 
-		// try {
-		// 	ff.setLogger(({ type, message }) => {
-		// 		postMessage({ status: "ffmpeg-log", message: `[${type}] ${message}` });
-		// 	});
-		// } catch (err) {
-		// 	postMessage({
-		// 		status: "log",
-		// 		message: "ff.setLogger not supported",
-		// 	});
-		// 	console.warn("[worker] ff.setLogger not supported", err);
-		// }
-
-		// try {
-		// 	ff.setProgress(({ ratio }) => {
-		// 		postMessage({ status: "ffmpeg-progress", ratio });
-		// 	});
-		// } catch (err) {
-		// 	postMessage({
-		// 		status: "log",
-		// 		message: "ff.setProgress not supported",
-		// 	});
-		// 	console.warn("[worker] ff.setProgress not supported", err);
-		// }
+		try {
+			ff.setLogger(({ type, message }) => {
+				postMessage({ status: "ffmpeg-log", message: `[${type}] ${message}` });
+			});
+			ff.setProgress(({ ratio }) => {
+				postMessage({ status: "ffmpeg-progress", ratio });
+			});
+		} catch {
+			postMessage({
+				status: "log",
+				message: "ffmpeg progress hooks unavailable",
+			});
+		}
 
 		postMessage({ status: "ffmpeg-ready" });
 		console.log("[worker] FFmpeg ready");
