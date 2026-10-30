@@ -87,7 +87,6 @@ const initFFmpeg = async () => {
 		ffmpegInstance = ff;
 		return ffmpegInstance;
 	} catch (err) {
-		postMessage({ status: "error", message: err.message || String(err) });
 		console.error("[worker] FFmpeg init failed", err);
 		throw err;
 	}
@@ -182,7 +181,6 @@ const convertMedia = async (arrayBuffer, fromExt, toExt) => {
 			await ff.exec(args);
 		} catch (err) {
 			console.error("[worker] ffmpeg exec error", err);
-			postMessage({ status: "error", message: err.message || String(err) });
 			throw err;
 		}
 
@@ -192,7 +190,6 @@ const convertMedia = async (arrayBuffer, fromExt, toExt) => {
 			data = await ff.readFile(outputName);
 		} catch (err) {
 			console.error("[worker] ffmpeg readFile error", err);
-			postMessage({ status: "error", message: err.message || String(err) });
 			throw err;
 		}
 
@@ -243,7 +240,7 @@ const handleConvert = async ({ filename, target, ext, text, arrayBuffer }) => {
 				if (rows.length > 0 && !csv) {
 					throw new Error("JSON produced an empty CSV");
 				}
-				mime = "text/csv;charset=utf-8;";
+				mime = "text/csv;charset=utf-8";
 				outBuffer = new TextEncoder().encode(csv).buffer;
 			} else if (target === "xlsx") {
 				({ mime, outBuffer } = createXlsxFile(XLSX.utils.json_to_sheet(rows)));
@@ -256,7 +253,7 @@ const handleConvert = async ({ filename, target, ext, text, arrayBuffer }) => {
 				try {
 					res = Papa.parse(csvText, {
 						header: true,
-						dynamicTyping: true,
+						// no dynamicTyping: a converter must not rewrite "007" to 7
 						skipEmptyLines: true,
 					});
 				} catch (err) {
@@ -264,7 +261,7 @@ const handleConvert = async ({ filename, target, ext, text, arrayBuffer }) => {
 				}
 				const json = res.data;
 				const jsonStr = JSON.stringify(json, null, 2);
-				mime = "application/json;charset=utf-8;";
+				mime = "application/json;charset=utf-8";
 				outBuffer = new TextEncoder().encode(jsonStr).buffer;
 			} else if (target === "xlsx") {
 				const ws = XLSX.utils.csv_to_sheet(csvText);
@@ -284,11 +281,11 @@ const handleConvert = async ({ filename, target, ext, text, arrayBuffer }) => {
 			if (target === "json") {
 				const json = XLSX.utils.sheet_to_json(ws, { defval: null });
 				const jsonStr = JSON.stringify(json, null, 2);
-				mime = "application/json;charset=utf-8;";
+				mime = "application/json;charset=utf-8";
 				outBuffer = new TextEncoder().encode(jsonStr).buffer;
 			} else if (target === "csv") {
 				const csv = XLSX.utils.sheet_to_csv(ws);
-				mime = "text/csv;charset=utf-8;";
+				mime = "text/csv;charset=utf-8";
 				outBuffer = new TextEncoder().encode(csv).buffer;
 			} else if (target === "xlsx") {
 				// re-emit the whole workbook so every sheet survives (e.g. xls -> xlsx)

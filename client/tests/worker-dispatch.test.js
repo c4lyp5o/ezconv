@@ -157,6 +157,21 @@ describe("worker dispatch: json input normalization", () => {
 		expect(out[0].status).toBe("error");
 		expect(out[0].message).toContain("JSON must be");
 	});
+
+	it("keeps leading-zero ids and big numbers intact", async () => {
+		const out = await drive({
+			filename: "ids.csv",
+			target: "json",
+			ext: "csv",
+			text: "id,amount\n007,1234567890123456789",
+		});
+
+		expect(out[0].status).toBe("done");
+		expect(out[0].mime).toBe("application/json;charset=utf-8");
+		const json = new TextDecoder().decode(out[0].buffer);
+		expect(json).toContain('"id": "007"');
+		expect(json).toContain("1234567890123456789");
+	});
 });
 
 describe("worker dispatch: data-loss warnings", () => {

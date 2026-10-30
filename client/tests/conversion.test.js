@@ -34,7 +34,6 @@ describe("Conversion Logic", () => {
 	it("should convert CSV to JSON", () => {
 		const result = Papa.parse(sampleCSV, {
 			header: true,
-			dynamicTyping: true,
 			skipEmptyLines: true,
 		});
 		expect(result.data).toHaveLength(2);
@@ -64,7 +63,6 @@ describe("Conversion Logic", () => {
 	it("should convert CSV to XLSX", () => {
 		const parsed = Papa.parse(sampleCSV, {
 			header: true,
-			dynamicTyping: true,
 			skipEmptyLines: true,
 		});
 		const ws = XLSX.utils.json_to_sheet(parsed.data);

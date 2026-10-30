@@ -112,7 +112,8 @@ export default function App() {
 					document.body.appendChild(a);
 					a.click();
 					a.remove();
-					URL.revokeObjectURL(url);
+					// revoke after a tick — immediate revoke can cancel the download
+					setTimeout(() => URL.revokeObjectURL(url), 1000);
 					break;
 				}
 				case "error":
@@ -138,13 +139,25 @@ export default function App() {
 	function handleFile(e) {
 		const f = e.target?.files?.[0] || e.dataTransfer?.files?.[0];
 		if (!f) return setFile(null);
-		setFile(f);
 		const newExt = getFileExtension(f.name);
+		const category = getFileCategory(newExt);
+		// drag & drop bypasses the picker's accept list — reject unknowns here
+		if (!category) {
+			setToast({
+				message: `✗ Unsupported file type: .${newExt || "unknown"}`,
+				type: "error",
+			});
+			setFile(null);
+			setExt("");
+			setTarget("");
+			setIsDragging(false);
+			return;
+		}
+		setFile(f);
 		setExt(newExt);
 		setIsDragging(false);
 
 		// Set reasonable default targets based on file type
-		const category = getFileCategory(newExt);
 		if (category === "data") {
 			if (newExt === "json") setTarget("csv");
 			else if (newExt === "csv") setTarget("json");
@@ -160,7 +173,6 @@ export default function App() {
 	}
 
 	async function handleConvert() {
-		console.log(target);
 		if (!file || !workerRef.current) return;
 
 		if (!target) return;
