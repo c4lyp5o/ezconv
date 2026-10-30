@@ -62,6 +62,8 @@ export default function App() {
 
 	// explicit busy flag: status text is display-only, the UI locks off this
 	const [isConverting, setIsConverting] = useState(false);
+	// encoder quality for lossy image targets (jpeg/webp), 0.50 - 1.00
+	const [quality, setQuality] = useState(0.92);
 
 	// UI flags
 	const [ffmpegLoading, setFfmpegLoading] = useState(false);
@@ -229,6 +231,9 @@ export default function App() {
 				target,
 				ext,
 			};
+			if (["jpg", "jpeg", "webp"].includes(target)) {
+				messagePayload.quality = quality;
+			}
 			const transferList = [];
 
 			if (isBinary) {
@@ -379,6 +384,27 @@ export default function App() {
 										</option>
 									))}
 								</select>
+								{["jpg", "jpeg", "webp"].includes(target) && (
+									<div className="mt-3">
+										<label
+											htmlFor="quality-range"
+											className="text-sm text-gray-300 font-medium block mb-2"
+										>
+											Quality: {Math.round(quality * 100)}%
+										</label>
+										<input
+											id="quality-range"
+											type="range"
+											min="50"
+											max="100"
+											step="5"
+											value={Math.round(quality * 100)}
+											onChange={(e) => setQuality(Number(e.target.value) / 100)}
+											disabled={isConverting}
+											className="w-full accent-blue-500"
+										/>
+									</div>
+								)}
 							</div>
 						</div>
 					)}

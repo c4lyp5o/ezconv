@@ -29,7 +29,7 @@ const createXlsxFile = (worksheet) => {
 };
 
 // Image conversion using Canvas API
-const convertImage = async (arrayBuffer, fromExt, toExt) => {
+const convertImage = async (arrayBuffer, fromExt, toExt, quality) => {
 	try {
 		const blob = new Blob([arrayBuffer], { type: imageMimeFor(fromExt) });
 		const imageBitmap = await createImageBitmap(blob);
@@ -40,7 +40,11 @@ const convertImage = async (arrayBuffer, fromExt, toExt) => {
 
 		imageBitmap.close();
 
-		const outBlob = await canvas.convertToBlob({ type: imageMimeFor(toExt) });
+		// quality is honored for jpeg/webp and ignored by png
+		const outBlob = await canvas.convertToBlob({
+			type: imageMimeFor(toExt),
+			quality,
+		});
 		return await outBlob.arrayBuffer();
 	} catch (err) {
 		console.error("[worker] Image conversion failed", err);
@@ -188,7 +192,7 @@ const convertMedia = async (arrayBuffer, fromExt, toExt) => {
 	}
 };
 
-const handleConvert = async ({ filename, target, ext, text, arrayBuffer }) => {
+const handleConvert = async ({ filename, target, ext, text, arrayBuffer, quality }) => {
 	try {
 		const outName = `${filename.replace(/\.[^.]+$/, "")}.${target}`;
 		const warnings = [];
@@ -271,7 +275,7 @@ const handleConvert = async ({ filename, target, ext, text, arrayBuffer }) => {
 			if (ext === "gif") {
 				warnings.push("gif animation flattened to a single frame");
 			}
-			outBuffer = await convertImage(arrayBuffer, ext, target);
+			outBuffer = await convertImage(arrayBuffer, ext, target, quality);
 			mime = imageMimeFor(target);
 		} else if (MEDIA_EXTENSIONS.includes(ext)) {
 			// Convert using FFmpeg
