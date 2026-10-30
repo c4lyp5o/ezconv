@@ -19,17 +19,17 @@ Browser ── fetch ──> Bun static server (server.js, streams dist/)
 
 ### Module map (client/src/)
 
-| File | What it owns |
-| --- | --- |
-| `App.jsx` | jobs model, worker effect, run bookkeeping (`runRef`), keyboard/clipboard listeners, layout |
-| `worker.js` | all conversion logic + the message dispatch; imports `file-config.js` |
-| `file-config.js` | extension → category tables, per-category default targets, canvas export MIME map |
-| `format.js` | `defaultTargetFor`, `getFileExtension`, `humanBytes`, `sizeNote` |
-| `components/Toast.jsx` | single toast (notes for non-fatal warnings) |
-| `components/DropZone.jsx` | multi-file drop area + `<input type=file multiple>` |
-| `components/JobRow.jsx` | one queue row: name, target select, status, progress, remove |
-| `components/ResultCard.jsx` | preview/re-download/copy for the last single-run result |
-| `components/LogsPanel.jsx` | live FFmpeg log lines |
+| File                        | What it owns                                                                                |
+| --------------------------- | ------------------------------------------------------------------------------------------- |
+| `App.jsx`                   | jobs model, worker effect, run bookkeeping (`runRef`), keyboard/clipboard listeners, layout |
+| `worker.js`                 | all conversion logic + the message dispatch; imports `file-config.js`                       |
+| `file-config.js`            | extension → category tables, per-category default targets, canvas export MIME map           |
+| `format.js`                 | `defaultTargetFor`, `getFileExtension`, `humanBytes`, `sizeNote`                            |
+| `components/Toast.jsx`      | single toast (notes for non-fatal warnings)                                                 |
+| `components/DropZone.jsx`   | multi-file drop area + `<input type=file multiple>`                                         |
+| `components/JobRow.jsx`     | one queue row: name, target select, status, progress, remove                                |
+| `components/ResultCard.jsx` | preview/re-download/copy for the last single-run result                                     |
+| `components/LogsPanel.jsx`  | live FFmpeg log lines                                                                       |
 
 ## Worker protocol
 
