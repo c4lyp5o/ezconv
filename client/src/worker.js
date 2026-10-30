@@ -12,16 +12,23 @@ const MEDIA_EXTENSIONS = [...AUDIO_EXTENSIONS, ...VIDEO_EXTENSIONS];
 // Singleton instance for FFmpeg
 let ffmpegInstance = null;
 
+// Serialize a workbook to xlsx bytes (exact slice — no slack from pooled buffers)
+const writeWorkbookFile = (wb) => {
+	const data = XLSX.write(wb, { bookType: "xlsx", type: "array" });
+	const mime =
+		"application/vnd.openxmlformats-officedocument.spreadsheetml.sheet";
+	const outBuffer = ArrayBuffer.isView(data)
+		? data.buffer.slice(data.byteOffset, data.byteOffset + data.byteLength)
+		: data;
+
+	return { mime, outBuffer };
+};
+
 // Create XLSX file from worksheet
 const createXlsxFile = (worksheet) => {
 	const wb = XLSX.utils.book_new();
 	XLSX.utils.book_append_sheet(wb, worksheet, "Sheet1");
-	const data = XLSX.write(wb, { bookType: "xlsx", type: "array" });
-	const mime =
-		"application/vnd.openxmlformats-officedocument.spreadsheetml.sheet";
-	const outBuffer = data.buffer ? data.buffer : data;
-
-	return { mime, outBuffer };
+	return writeWorkbookFile(wb);
 };
 
 // Image conversion using Canvas API
@@ -348,6 +355,9 @@ self.onmessage = async (e) => {
 				const csv = XLSX.utils.sheet_to_csv(ws);
 				mime = "text/csv;charset=utf-8;";
 				outBuffer = new TextEncoder().encode(csv).buffer;
+			} else if (target === "xlsx") {
+				// re-emit the whole workbook so every sheet survives (e.g. xls -> xlsx)
+				({ mime, outBuffer } = writeWorkbookFile(wb));
 			}
 		} else if (IMAGE_EXTENSIONS.includes(ext)) {
 			// Convert image format using Canvas API
@@ -373,6 +383,11 @@ self.onmessage = async (e) => {
 			mime = mimeMap[target] || "application/octet-stream";
 		} else {
 			throw new Error("Unsupported input format");
+		}
+
+		// No branch handled this pairing — refuse instead of "succeeding" with junk
+		if (!outBuffer) {
+			throw new Error(`Unsupported conversion: ${ext} to ${target}`);
 		}
 
 		// Transfer the array buffer back to the main thread
