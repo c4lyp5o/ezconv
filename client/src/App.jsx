@@ -68,6 +68,18 @@ export default function App() {
 	// encoder quality for lossy image targets (jpeg/webp), 0.50 - 1.00
 	const [quality, setQuality] = useState(0.92);
 
+	// last successful conversion: kept alive for preview / re-download / copy
+	const [result, setResult] = useState(null);
+	const [copied, setCopied] = useState(false);
+	const resultUrlRef = useRef(null);
+	resultUrlRef.current = result?.url || null;
+	// revoke the kept result URL when the app unmounts
+	useEffect(() => {
+		return () => {
+			if (resultUrlRef.current) URL.revokeObjectURL(resultUrlRef.current);
+		};
+	}, []);
+
 	liveRef.current = { handleFile, handleConvert, isConverting };
 
 	// UI flags
@@ -140,8 +152,25 @@ export default function App() {
 					document.body.appendChild(a);
 					a.click();
 					a.remove();
-					// revoke after a tick — immediate revoke can cancel the download
-					setTimeout(() => URL.revokeObjectURL(url), 1000);
+					const isImage = (mime || "").startsWith("image/");
+					const isText =
+						mime === "text/csv;charset=utf-8" || mime === "application/json;charset=utf-8";
+					// the URL stays alive for the result card; revoked on replace/reset
+					setResult((prev) => {
+						if (prev?.url) URL.revokeObjectURL(prev.url);
+						return {
+							name: filename || "output",
+							mime,
+							fromSize: inputSizeRef.current,
+							toSize: buffer?.byteLength,
+							warnings: warnings || [],
+							url,
+							isImage,
+							isText,
+							text: isText ? new TextDecoder().decode(buffer) : null,
+						};
+					});
+					setCopied(false);
 					break;
 				}
 				case "error":
@@ -192,6 +221,22 @@ export default function App() {
 		setTarget("");
 		setStatus("Idle");
 		setToast(null);
+		setResult((prev) => {
+			if (prev?.url) URL.revokeObjectURL(prev.url);
+			return null;
+		});
+		setCopied(false);
+	}
+
+	async function handleCopy() {
+		if (!result?.text) return;
+		try {
+			await navigator.clipboard.writeText(result.text);
+			setCopied(true);
+			setTimeout(() => setCopied(false), 2000);
+		} catch (err) {
+			setToast({ message: `✗ Copy failed: ${err.message}`, type: "error" });
+		}
 	}
 
 	function handleFile(e) {
@@ -484,6 +529,56 @@ export default function App() {
 									</div>
 								</>
 							)}
+						</div>
+					)}
+
+					{result && (
+						<div className="bg-gray-700 border border-gray-600 rounded-lg p-4">
+							<div className="flex items-center gap-3">
+								{result.isImage && (
+									<img
+										src={result.url}
+										alt={result.name}
+										className="w-14 h-14 rounded border border-gray-600 object-cover"
+									/>
+								)}
+								<div className="min-w-0 flex-1">
+									<p className="text-sm font-medium text-gray-200 truncate">{result.name}</p>
+									<p className="text-xs text-gray-400">
+										{humanBytes(result.fromSize)} → {humanBytes(result.toSize)} (
+										{sizeNote(result.fromSize, result.toSize)})
+										{result.warnings.length > 0 && ` · ${result.warnings.join("; ")}`}
+									</p>
+								</div>
+							</div>
+							<div className="mt-3 flex flex-wrap gap-2">
+								<a
+									href={result.url}
+									download={result.name}
+									className="px-3 py-1.5 text-xs bg-blue-600 text-white rounded hover:bg-blue-700"
+								>
+									Download
+								</a>
+								{result.isImage && (
+									<a
+										href={result.url}
+										target="_blank"
+										rel="noreferrer"
+										className="px-3 py-1.5 text-xs border border-gray-600 rounded hover:bg-gray-600"
+									>
+										Open
+									</a>
+								)}
+								{result.isText && (
+									<button
+										type="button"
+										onClick={handleCopy}
+										className="px-3 py-1.5 text-xs border border-gray-600 rounded hover:bg-gray-600"
+									>
+										{copied ? "Copied!" : "Copy"}
+									</button>
+								)}
+							</div>
 						</div>
 					)}
 
