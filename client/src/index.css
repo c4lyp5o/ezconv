@@ -16,6 +16,7 @@
 }
 
 @media (prefers-reduced-motion: reduce) {
+	/* biome-ignore lint/complexity/noImportantStyles: must beat utility specificity */
 	* {
 		animation-duration: 0.01ms !important;
 		transition-duration: 0.01ms !important;
