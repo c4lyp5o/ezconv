@@ -3,8 +3,8 @@ import {
 	getFileCategory,
 	ALL_EXTENSIONS,
 	AUDIO_EXTENSIONS,
+	CANVAS_OUTPUT_EXTENSIONS,
 	DATA_EXTENSIONS,
-	IMAGE_EXTENSIONS,
 	VIDEO_EXTENSIONS,
 } from "./file-config";
 
@@ -142,7 +142,8 @@ export default function App() {
 			else if (newExt === "csv") setTarget("json");
 			else setTarget("csv");
 		} else if (category === "image") {
-			setTarget("png");
+			// never default to the input's own format
+			setTarget(newExt === "png" ? "jpg" : "png");
 		} else if (category === "audio") {
 			setTarget("mp3");
 		} else if (category === "video") {
@@ -208,8 +209,11 @@ export default function App() {
 			// For data, it never makes sense to convert to the same type
 			return DATA_EXTENSIONS.filter((e) => e !== ext && e !== "xls"); // xls is write-only for now
 		} else if (category === "image") {
-			// For images, canvas conversion to same type is not useful
-			return IMAGE_EXTENSIONS.filter((e) => e !== ext && e !== "svg"); // svg is not a supported output
+			// Canvas can only ENCODE png/jpeg/webp — gif/bmp/svg targets would
+			// silently download PNG bytes with the wrong name, so not offered.
+			// jpg and jpeg are one format: converting between them is just a rename.
+			const sameFormat = ext === "jpg" || ext === "jpeg" ? ["jpg", "jpeg"] : [ext];
+			return CANVAS_OUTPUT_EXTENSIONS.filter((e) => !sameFormat.includes(e));
 		} else if (category === "audio") {
 			// For audio/video, allow same-extension to allow for remuxing/repair
 			return AUDIO_EXTENSIONS;

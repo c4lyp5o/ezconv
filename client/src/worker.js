@@ -4,6 +4,7 @@ import {
 	IMAGE_EXTENSIONS,
 	AUDIO_EXTENSIONS,
 	VIDEO_EXTENSIONS,
+	imageMimeFor,
 } from "./file-config";
 
 const MEDIA_EXTENSIONS = [...AUDIO_EXTENSIONS, ...VIDEO_EXTENSIONS];
@@ -26,7 +27,7 @@ const createXlsxFile = (worksheet) => {
 // Image conversion using Canvas API
 const convertImage = async (arrayBuffer, fromExt, toExt) => {
 	try {
-		const blob = new Blob([arrayBuffer], { type: `image/${fromExt}` });
+		const blob = new Blob([arrayBuffer], { type: imageMimeFor(fromExt) });
 		const imageBitmap = await createImageBitmap(blob);
 
 		const canvas = new OffscreenCanvas(imageBitmap.width, imageBitmap.height);
@@ -35,7 +36,7 @@ const convertImage = async (arrayBuffer, fromExt, toExt) => {
 
 		imageBitmap.close();
 
-		const outBlob = await canvas.convertToBlob({ type: `image/${toExt}` });
+		const outBlob = await canvas.convertToBlob({ type: imageMimeFor(toExt) });
 		return await outBlob.arrayBuffer();
 	} catch (err) {
 		console.error("[worker] Image conversion failed", err);
@@ -351,7 +352,7 @@ self.onmessage = async (e) => {
 		} else if (IMAGE_EXTENSIONS.includes(ext)) {
 			// Convert image format using Canvas API
 			outBuffer = await convertImage(arrayBuffer, ext, target);
-			mime = `image/${target}`;
+			mime = imageMimeFor(target);
 		} else if (MEDIA_EXTENSIONS.includes(ext)) {
 			// Convert using FFmpeg
 			outBuffer = await convertMedia(arrayBuffer, ext, target);
