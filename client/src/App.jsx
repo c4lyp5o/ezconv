@@ -32,6 +32,9 @@ export default function App() {
 	const [isConverting, setIsConverting] = useState(false);
 	// encoder quality for lossy image targets (jpeg/webp), 0.50 - 1.00
 	const [quality, setQuality] = useState(0.92);
+	// media output controls ("720" preserves the old min(1280, iw) cap)
+	const [resolution, setResolution] = useState("720");
+	const [bitrate, setBitrate] = useState(192);
 
 	// last successful conversion: kept alive for preview / re-download / copy
 	const [result, setResult] = useState(null);
@@ -323,6 +326,9 @@ export default function App() {
 				if (LOSSY_TARGETS.includes(job.target)) {
 					messagePayload.quality = quality;
 				}
+				if (job.category === "audio" || job.category === "video") {
+					messagePayload.mediaOptions = { resolution, bitrate };
+				}
 				const isBinary =
 					job.ext === "xlsx" ||
 					job.ext === "xls" ||
@@ -441,6 +447,50 @@ export default function App() {
 								disabled={isConverting}
 								className="w-full accent-blue-500"
 							/>
+						</div>
+					)}
+
+					{isMedia && (
+						<div className="flex gap-3">
+							<div className="flex-1">
+								<label
+									htmlFor="resolution-select"
+									className="text-sm text-gray-300 font-medium block mb-2"
+								>
+									Max resolution
+								</label>
+								<select
+									id="resolution-select"
+									className="w-full border border-gray-600 bg-gray-700 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+									value={resolution}
+									onChange={(e) => setResolution(e.target.value)}
+									disabled={isConverting}
+								>
+									<option value="original">Original</option>
+									<option value="1080">1080p</option>
+									<option value="720">720p</option>
+									<option value="480">480p</option>
+								</select>
+							</div>
+							<div className="flex-1">
+								<label
+									htmlFor="bitrate-select"
+									className="text-sm text-gray-300 font-medium block mb-2"
+								>
+									Audio bitrate
+								</label>
+								<select
+									id="bitrate-select"
+									className="w-full border border-gray-600 bg-gray-700 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+									value={bitrate}
+									onChange={(e) => setBitrate(Number(e.target.value))}
+									disabled={isConverting}
+								>
+									<option value={128}>128 kbps</option>
+									<option value={192}>192 kbps</option>
+									<option value={256}>256 kbps</option>
+								</select>
+							</div>
 						</div>
 					)}
 

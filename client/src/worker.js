@@ -90,8 +90,49 @@ const initFFmpeg = async () => {
 	}
 };
 
+// Build ffmpeg args for a media conversion (pure, exported for tests)
+const LOSSY_AUDIO = ["mp3", "aac", "ogg", "m4a"];
+const SCALE_WIDTHS = { 1080: 1920, 720: 1280, 480: 854 };
+
+export const buildMediaArgs = ({ inputName, outputName, fromExt, toExt, resolution, bitrate }) => {
+	const args = ["-y", "-threads", "1", "-i", inputName];
+
+	// If same extension/container and no re-encode needed, stream copy first
+	const tryCopy = fromExt === toExt && MEDIA_EXTENSIONS.includes(fromExt);
+	if (tryCopy) {
+		// attempt container/codec copy (fast, low memory)
+		args.push("-c", "copy", outputName);
+		return args;
+	}
+
+	const width = SCALE_WIDTHS[resolution];
+	// keep aspect ratio, cap width; "original" skips scaling entirely
+	const scaleFilter = width ? `scale='min(${width},iw)':'-2'` : null;
+	const audioBitrate = bitrate ? ["-b:a", `${bitrate}k`] : [];
+
+	if (VIDEO_EXTENSIONS.includes(fromExt) || VIDEO_EXTENSIONS.includes(toExt)) {
+		// conservative defaults to keep wasm memory low: single thread,
+		// optional downscale, light codec params per target
+		let codec;
+		if (toExt === "webm") {
+			codec = ["-c:v", "libvpx", "-b:v", "1M", "-c:a", "libvorbis"];
+		} else if (toExt === "mp4" || toExt === "m4a") {
+			codec = ["-c:v", "libx264", "-preset", "veryfast", "-crf", "28", "-c:a", "aac"];
+		} else {
+			codec = ["-c:v", "libx264", "-preset", "veryfast", "-crf", "30", "-c:a", "aac"];
+		}
+		args.push(...(scaleFilter ? ["-vf", scaleFilter] : []), ...codec, ...audioBitrate, outputName);
+		return args;
+	}
+
+	// audio / other media: simple conversion, bitrate only for lossy targets
+	if (LOSSY_AUDIO.includes(toExt)) args.push(...audioBitrate);
+	args.push(outputName);
+	return args;
+};
+
 // Media conversion using FFmpeg
-const convertMedia = async (arrayBuffer, fromExt, toExt) => {
+const convertMedia = async (arrayBuffer, fromExt, toExt, mediaOptions = {}) => {
 	try {
 		const ff = await initFFmpeg();
 
@@ -102,70 +143,14 @@ const convertMedia = async (arrayBuffer, fromExt, toExt) => {
 
 		await ff.writeFile(inputName, new Uint8Array(arrayBuffer));
 
-		// Build safer ffmpeg args for video to reduce wasm memory pressure
-		const args = ["-y", "-threads", "1", "-i", inputName];
-
-		// If same extension/container and no re-encode needed, try a stream copy first
-		const tryCopy =
-			fromExt === toExt &&
-			(MEDIA_EXTENSIONS.includes(fromExt) || IMAGE_EXTENSIONS.includes(fromExt));
-		if (tryCopy) {
-			// attempt container/codec copy (fast, low memory)
-			args.push("-c", "copy", outputName);
-		} else if (VIDEO_EXTENSIONS.includes(fromExt) || VIDEO_EXTENSIONS.includes(toExt)) {
-			// For video conversions, use conservative defaults to reduce memory:
-			// - single thread (-threads 1)
-			// - downscale to max width 1280 to reduce working memory
-			// - choose relatively light codec params depending on target
-			// Note: codec support depends on the ffmpeg wasm build; these are common options.
-			const scaleFilter = "scale='min(1280,iw)':'-2'"; // keep aspect ratio, max width 1280
-			if (toExt === "webm") {
-				args.push(
-					"-vf",
-					scaleFilter,
-					"-c:v",
-					"libvpx",
-					"-b:v",
-					"1M",
-					"-c:a",
-					"libvorbis",
-					outputName,
-				);
-			} else if (toExt === "mp4" || toExt === "m4a") {
-				// mp4 container with H.264/AAC (if available)
-				args.push(
-					"-vf",
-					scaleFilter,
-					"-c:v",
-					"libx264",
-					"-preset",
-					"veryfast",
-					"-crf",
-					"28",
-					"-c:a",
-					"aac",
-					outputName,
-				);
-			} else {
-				// fallback: attempt simple re-encode with scaling to limit footprint
-				args.push(
-					"-vf",
-					scaleFilter,
-					"-c:v",
-					"libx264",
-					"-preset",
-					"veryfast",
-					"-crf",
-					"30",
-					"-c:a",
-					"aac",
-					outputName,
-				);
-			}
-		} else {
-			// audio / other media: default simple conversion
-			args.push(outputName);
-		}
+		const args = buildMediaArgs({
+			inputName,
+			outputName,
+			fromExt,
+			toExt,
+			resolution: mediaOptions.resolution,
+			bitrate: mediaOptions.bitrate,
+		});
 
 		post({
 			status: "log",
@@ -199,7 +184,16 @@ const convertMedia = async (arrayBuffer, fromExt, toExt) => {
 	}
 };
 
-const handleConvert = async ({ filename, target, ext, text, arrayBuffer, quality, jobId }) => {
+const handleConvert = async ({
+	filename,
+	target,
+	ext,
+	text,
+	arrayBuffer,
+	quality,
+	mediaOptions,
+	jobId,
+}) => {
 	currentJobId = jobId ?? null;
 	try {
 		const outName = `${filename.replace(/\.[^.]+$/, "")}.${target}`;
@@ -287,7 +281,7 @@ const handleConvert = async ({ filename, target, ext, text, arrayBuffer, quality
 			mime = imageMimeFor(target);
 		} else if (MEDIA_EXTENSIONS.includes(ext)) {
 			// Convert using FFmpeg
-			outBuffer = await convertMedia(arrayBuffer, ext, target);
+			outBuffer = await convertMedia(arrayBuffer, ext, target, mediaOptions);
 			const mimeMap = {
 				mp3: "audio/mpeg",
 				wav: "audio/wav",

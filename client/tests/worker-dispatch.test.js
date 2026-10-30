@@ -7,8 +7,10 @@ globalThis.postMessage = (msg) => {
 	sent.push(msg);
 };
 
+let buildMediaArgs;
+
 beforeAll(async () => {
-	await import("../src/worker.js");
+	({ buildMediaArgs } = await import("../src/worker.js"));
 });
 
 // Drive the real self.onmessage dispatch and return non-log messages.
@@ -243,5 +245,84 @@ describe("worker dispatch: data-loss warnings", () => {
 
 		expect(out[0].status).toBe("done");
 		expect(out[0].warnings).toEqual([]);
+	});
+});
+
+describe("buildMediaArgs", () => {
+	it("stream-copies same-extension remuxes untouched", () => {
+		const args = buildMediaArgs({
+			inputName: "input.mp4",
+			outputName: "output.mp4",
+			fromExt: "mp4",
+			toExt: "mp4",
+		});
+		expect(args).toEqual(["-y", "-threads", "1", "-i", "input.mp4", "-c", "copy", "output.mp4"]);
+	});
+
+	it("applies the resolution cap and audio bitrate on video re-encodes", () => {
+		const args = buildMediaArgs({
+			inputName: "input.mp4",
+			outputName: "output.webm",
+			fromExt: "mp4",
+			toExt: "webm",
+			resolution: "720",
+			bitrate: 192,
+		});
+		expect(args).toContain("scale='min(1280,iw)':'-2'");
+		expect(args).toContain("libvpx");
+		expect(args).toContain("-b:a");
+		expect(args).toContain("192k");
+		expect(args[args.length - 1]).toBe("output.webm");
+	});
+
+	it("skips scaling entirely for original resolution", () => {
+		const args = buildMediaArgs({
+			inputName: "input.mp4",
+			outputName: "output.webm",
+			fromExt: "mp4",
+			toExt: "webm",
+			resolution: "original",
+			bitrate: 128,
+		});
+		expect(args).not.toContain("-vf");
+	});
+
+	it("maps 1080p to 1920 and 480p to 854", () => {
+		const hi = buildMediaArgs({
+			inputName: "input.mp4",
+			outputName: "output.mp4",
+			fromExt: "avi",
+			toExt: "mp4",
+			resolution: "1080",
+		});
+		expect(hi).toContain("scale='min(1920,iw)':'-2'");
+		const lo = buildMediaArgs({
+			inputName: "input.mp4",
+			outputName: "output.mp4",
+			fromExt: "avi",
+			toExt: "mp4",
+			resolution: "480",
+		});
+		expect(lo).toContain("scale='min(854,iw)':'-2'");
+	});
+
+	it("bitrates lossy audio targets but leaves lossless ones bare", () => {
+		const lossy = buildMediaArgs({
+			inputName: "input.wav",
+			outputName: "output.mp3",
+			fromExt: "wav",
+			toExt: "mp3",
+			bitrate: 256,
+		});
+		expect(lossy).toContain("-b:a");
+		expect(lossy).toContain("256k");
+		const lossless = buildMediaArgs({
+			inputName: "input.mp3",
+			outputName: "output.flac",
+			fromExt: "mp3",
+			toExt: "flac",
+			bitrate: 256,
+		});
+		expect(lossless).not.toContain("-b:a");
 	});
 });
