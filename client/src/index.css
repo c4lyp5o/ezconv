@@ -16,9 +16,10 @@
 }
 
 @media (prefers-reduced-motion: reduce) {
-	/* biome-ignore lint/complexity/noImportantStyles: must beat utility specificity */
 	* {
+		/* biome-ignore lint/complexity/noImportantStyles: reduced motion must win */
 		animation-duration: 0.01ms !important;
+		/* biome-ignore lint/complexity/noImportantStyles: reduced motion must win */
 		transition-duration: 0.01ms !important;
 	}
 }
