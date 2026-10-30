@@ -1,47 +1,50 @@
-import { useEffect, useMemo, useRef, useState } from "react";
-import {
-	getFileCategory,
-	ALL_EXTENSIONS,
-	AUDIO_EXTENSIONS,
-	DATA_EXTENSIONS,
-	IMAGE_EXTENSIONS,
-	VIDEO_EXTENSIONS,
-} from "./file-config";
+import JSZip from "jszip";
+import { useCallback, useEffect, useRef, useState } from "react";
+import DropZone from "./components/DropZone";
+import JobRow from "./components/JobRow";
+import LogsPanel from "./components/LogsPanel";
+import ResultCard from "./components/ResultCard";
+import Toast from "./components/Toast";
+import { ALL_EXTENSIONS, AUDIO_EXTENSIONS, getFileCategory, VIDEO_EXTENSIONS } from "./file-config";
+import { defaultTargetFor, getFileExtension, humanBytes, sizeNote } from "./format";
 
-function getFileExtension(filename) {
-	return filename
-		.slice(((filename.lastIndexOf(".") - 1) >>> 0) + 2)
-		.toLowerCase();
-}
+// File size limits per category (bytes)
+const SIZE_LIMITS = {
+	data: 10 * 1024 * 1024, // 10 MB
+	image: 15 * 1024 * 1024, // 15 MB
+	audio: 80 * 1024 * 1024, // 80 MB
+	video: 30 * 1024 * 1024, // 30 MB (Reduced to prevent memory errors)
+};
 
-function Toast({ message, type, onClose }) {
-	useEffect(() => {
-		const timer = setTimeout(onClose, 4000);
-		return () => clearTimeout(timer);
-	}, [onClose]);
-
-	const bgColor = type === "success" ? "bg-green-500" : "bg-red-500";
-
-	return (
-		<div
-			className={`${bgColor} text-white px-4 py-3 rounded shadow-lg animate-fade-in`}
-			role="alert"
-		>
-			{message}
-		</div>
-	);
-}
+const LOSSY_TARGETS = ["jpg", "jpeg", "webp"];
 
 export default function App() {
-	const [file, setFile] = useState(null);
-	const [ext, setExt] = useState("");
-	const [target, setTarget] = useState("");
+	const [jobs, setJobs] = useState([]);
 	const [status, setStatus] = useState("Idle");
 	const [toast, setToast] = useState(null);
 	const [isDragging, setIsDragging] = useState(false);
 	const workerRef = useRef(null);
+	const inputRef = useRef(null);
+	// latest handlers/state for the stable window listeners
+	const liveRef = useRef({});
 
-	const isConverting = status.toLowerCase().includes("convert");
+	// explicit busy flag: status text is display-only, the UI locks off this
+	const [isConverting, setIsConverting] = useState(false);
+	// encoder quality for lossy image targets (jpeg/webp), 0.50 - 1.00
+	const [quality, setQuality] = useState(0.92);
+	// media output controls ("720" preserves the old min(1280, iw) cap)
+	const [resolution, setResolution] = useState("720");
+	const [bitrate, setBitrate] = useState(192);
+
+	// last successful conversion: kept alive for preview / re-download / copy
+	const [result, setResult] = useState(null);
+	const [copied, setCopied] = useState(false);
+	const resultUrlRef = useRef(null);
+	resultUrlRef.current = result?.url || null;
+	// bookkeeping for the current run (batch summary + auto-download decision)
+	const runRef = useRef({ total: 0, done: 0, failed: 0, autoDownload: false });
+	// input sizes per job id, for the result summaries
+	const sizeMapRef = useRef({});
 
 	// UI flags
 	const [ffmpegLoading, setFfmpegLoading] = useState(false);
@@ -49,13 +52,59 @@ export default function App() {
 	const [ffmpegLogs, setFfmpegLogs] = useState([]);
 	const [showLogs, setShowLogs] = useState(false);
 
-	// File size limits per category (bytes)
-	const SIZE_LIMITS = {
-		data: 10 * 1024 * 1024, // 10 MB
-		image: 15 * 1024 * 1024, // 15 MB
-		audio: 80 * 1024 * 1024, // 80 MB
-		video: 30 * 1024 * 1024, // 30 MB (Reduced to prevent memory errors)
-	};
+	// revoke kept URLs when the app unmounts
+	useEffect(() => {
+		return () => {
+			if (resultUrlRef.current) URL.revokeObjectURL(resultUrlRef.current);
+		};
+	}, []);
+
+	liveRef.current = { addFiles, handleConvertAll, isConverting };
+
+	const finishIfRunDone = useCallback(() => {
+		const r = runRef.current;
+		if (r.done + r.failed < r.total) return;
+		setIsConverting(false);
+		setFfmpegProgress(0);
+		setStatus(r.failed > 0 ? "Finished with errors" : "Done");
+		if (r.total > 1) {
+			setToast({
+				message:
+					r.failed > 0
+						? `✓ ${r.done}/${r.total} converted (${r.failed} failed)`
+						: `✓ ${r.done}/${r.total} converted`,
+				type: r.failed > 0 ? "error" : "success",
+			});
+		}
+	}, []);
+
+	const buildResult = useCallback((outName, fromSize, buffer, mime, warnings) => {
+		const blob = new Blob([buffer], { type: mime || "application/octet-stream" });
+		const url = URL.createObjectURL(blob);
+		const isImage = (mime || "").startsWith("image/");
+		const isText = mime === "text/csv;charset=utf-8" || mime === "application/json;charset=utf-8";
+		return {
+			name: outName || "output",
+			mime,
+			fromSize,
+			toSize: buffer?.byteLength,
+			warnings: warnings || [],
+			blob,
+			url,
+			isImage,
+			isText,
+			text: isText ? new TextDecoder().decode(buffer) : null,
+		};
+	}, []);
+
+	const downloadResult = useCallback((res) => {
+		const a = document.createElement("a");
+		a.href = res.url;
+		a.download = res.name;
+		document.body.appendChild(a);
+		a.click();
+		a.remove();
+	}, []);
 
 	useEffect(() => {
 		const w = new Worker(new URL("./worker.js", import.meta.url), {
@@ -63,182 +112,285 @@ export default function App() {
 		});
 		workerRef.current = w;
 		w.onmessage = (e) => {
-			const { status, message, ratio, buffer, mime, filename } = e.data;
+			const { status, message, ratio, buffer, mime, warnings, jobId, filename } = e.data;
 
 			switch (status) {
 				case "ffmpeg-loading":
 					setFfmpegLoading(true);
-					setStatus("Loading FFmpeg...");
 					break;
 				case "ffmpeg-ready":
 					setFfmpegLoading(false);
-					setStatus("Converting...");
-					console.log("[worker] FFmpeg ready");
 					break;
 				case "ffmpeg-log":
-					setFfmpegLogs((s) => {
-						const nxt = [...s.slice(-199), message];
-						return nxt;
-					});
-					console.log("[ffmpeg]", message);
+				case "log":
+					setFfmpegLogs((s) => [...s.slice(-199), message]);
 					break;
 				case "ffmpeg-progress":
 					setFfmpegProgress(Number(ratio || 0));
-					break;
-				case "log":
-					console.log("[worker]", message);
-					setFfmpegLogs((s) => {
-						const nxt = [...s.slice(-199), message];
-						return nxt;
-					});
+					setJobs((prev) =>
+						prev.map((j) => (j.id === jobId ? { ...j, progress: Number(ratio || 0) } : j)),
+					);
 					break;
 				case "done": {
-					setStatus("Done");
-					setToast({ message: "✓ Conversion successful!", type: "success" });
-					const blob = new Blob([buffer], {
-						type: mime || "application/octet-stream",
-					});
-					const url = URL.createObjectURL(blob);
-					const a = document.createElement("a");
-					a.href = url;
-					a.download = filename || "output";
-					document.body.appendChild(a);
-					a.click();
-					a.remove();
-					URL.revokeObjectURL(url);
+					runRef.current.done += 1;
+					const res = buildResult(filename, sizeMapRef.current[jobId] ?? 0, buffer, mime, warnings);
+					setJobs((prev) =>
+						prev.map((j) =>
+							j.id === jobId ? { ...j, status: "done", progress: 1, result: res } : j,
+						),
+					);
+					// single-file runs keep the classic auto-download + size toast
+					if (runRef.current.autoDownload) {
+						downloadResult(res);
+						setResult((prev) => {
+							if (prev?.url) URL.revokeObjectURL(prev.url);
+							return res;
+						});
+						setCopied(false);
+						setToast({
+							message: `✓ ${humanBytes(res.fromSize)} → ${humanBytes(res.toSize)} (${sizeNote(
+								res.fromSize,
+								res.toSize,
+							)})${warnings?.length ? ` (${warnings.join("; ")})` : ""}`,
+							type: "success",
+						});
+					}
+					finishIfRunDone();
 					break;
 				}
-				case "error":
-					setStatus("Error");
-					setToast({ message: `✗ Error: ${message}`, type: "error" });
+				case "error": {
+					runRef.current.failed += 1;
+					setJobs((prev) =>
+						prev.map((j) => (j.id === jobId ? { ...j, status: "error", error: message } : j)),
+					);
+					finishIfRunDone();
 					break;
+				}
 			}
 		};
 		return () => {
 			w.terminate();
 		};
+	}, [buildResult, downloadResult, finishIfRunDone]);
+
+	// clipboard paste + keyboard shortcuts: Ctrl+O browse, Enter convert
+	useEffect(() => {
+		const onPaste = (e) => {
+			if (liveRef.current.isConverting) return;
+			if (e.clipboardData?.files?.length) liveRef.current.addFiles(e.clipboardData.files);
+		};
+		const onKey = (e) => {
+			if (e.key === "o" && (e.ctrlKey || e.metaKey)) {
+				e.preventDefault();
+				inputRef.current?.click();
+				return;
+			}
+			if (e.key !== "Enter" || e.ctrlKey || e.metaKey || e.shiftKey) return;
+			// let buttons and form controls handle their own Enter
+			const tag = e.target?.tagName;
+			if (tag === "BUTTON" || tag === "SELECT" || tag === "TEXTAREA") return;
+			if (tag === "INPUT" && e.target?.type !== "range") return;
+			e.preventDefault();
+			liveRef.current.handleConvertAll();
+		};
+		window.addEventListener("paste", onPaste);
+		window.addEventListener("keydown", onKey);
+		return () => {
+			window.removeEventListener("paste", onPaste);
+			window.removeEventListener("keydown", onKey);
+		};
 	}, []);
 
 	function handleReset() {
-		setFile(null);
-		setExt("");
-		setTarget("");
+		setJobs((prev) => {
+			for (const j of prev) if (j.result?.url) URL.revokeObjectURL(j.result.url);
+			return [];
+		});
 		setStatus("Idle");
 		setToast(null);
+		setResult((prev) => {
+			if (prev?.url) URL.revokeObjectURL(prev.url);
+			return null;
+		});
+		setCopied(false);
+		setFfmpegProgress(0);
 	}
 
-	function handleFile(e) {
-		const f = e.target?.files?.[0] || e.dataTransfer?.files?.[0];
-		if (!f) return setFile(null);
-		setFile(f);
-		const newExt = getFileExtension(f.name);
-		setExt(newExt);
-		setIsDragging(false);
-
-		// Set reasonable default targets based on file type
-		const category = getFileCategory(newExt);
-		if (category === "data") {
-			if (newExt === "json") setTarget("csv");
-			else if (newExt === "csv") setTarget("json");
-			else setTarget("csv");
-		} else if (category === "image") {
-			setTarget("png");
-		} else if (category === "audio") {
-			setTarget("mp3");
-		} else if (category === "video") {
-			setTarget("mp4");
-		}
-	}
-
-	async function handleConvert() {
-		console.log(target);
-		if (!file || !workerRef.current) return;
-
-		if (!target) return;
-
+	async function handleCopy() {
+		if (!result?.text) return;
 		try {
-			setStatus("Reading file...");
-			const category = getFileCategory(ext);
-			const isBinary =
-				ext === "xlsx" ||
-				ext === "xls" ||
-				category === "image" ||
-				category === "audio" ||
-				category === "video";
-
-			// File size check
-			const limit = SIZE_LIMITS[category] || SIZE_LIMITS.data;
-			if (file.size > limit) {
-				const human = (n) => `${(n / 1024 / 1024).toFixed(1)} MB`;
-				const confirmMsg = `File is ${human(file.size)}, which exceeds the recommended limit of ${human(limit)} for ${category} files. Continue?`;
-				if (!window.confirm(confirmMsg)) {
-					setStatus("Idle");
-					return;
-				}
-			}
-
-			const messagePayload = {
-				action: "convert",
-				filename: file.name,
-				target,
-				ext,
-			};
-			const transferList = [];
-
-			if (isBinary) {
-				const buffer = await file.arrayBuffer();
-				messagePayload.arrayBuffer = buffer;
-				transferList.push(buffer);
-			} else {
-				messagePayload.text = await file.text();
-			}
-
-			setStatus("Converting...");
-			workerRef.current.postMessage(messagePayload, transferList);
+			await navigator.clipboard.writeText(result.text);
+			setCopied(true);
+			setTimeout(() => setCopied(false), 2000);
 		} catch (err) {
-			setStatus(`Error reading file: ${err.message}`);
+			setToast({ message: `✗ Copy failed: ${err.message}`, type: "error" });
 		}
 	}
 
-	const options = useMemo(() => {
-		if (!ext) return [];
-		const category = getFileCategory(ext);
-
-		if (category === "data") {
-			// For data, it never makes sense to convert to the same type
-			return DATA_EXTENSIONS.filter((e) => e !== ext && e !== "xls"); // xls is write-only for now
-		} else if (category === "image") {
-			// For images, canvas conversion to same type is not useful
-			return IMAGE_EXTENSIONS.filter((e) => e !== ext && e !== "svg"); // svg is not a supported output
-		} else if (category === "audio") {
-			// For audio/video, allow same-extension to allow for remuxing/repair
-			return AUDIO_EXTENSIONS;
-		} else if (category === "video") {
-			return VIDEO_EXTENSIONS;
+	function addFiles(fileList) {
+		const accepted = [];
+		const rejected = [];
+		for (const f of fileList) {
+			const newExt = getFileExtension(f.name);
+			const category = getFileCategory(newExt);
+			// drag & drop bypasses the picker's accept list — reject unknowns here
+			if (!category) {
+				rejected.push(f.name);
+				continue;
+			}
+			accepted.push({
+				id: crypto.randomUUID(),
+				file: f,
+				ext: newExt,
+				category,
+				target: defaultTargetFor(newExt, category),
+				status: "ready",
+				progress: 0,
+				result: null,
+				error: null,
+			});
 		}
-		return [];
-	}, [ext]);
+		if (rejected.length > 0) {
+			setToast({
+				message: `✗ Unsupported file type: ${rejected.join(", ")}`,
+				type: "error",
+			});
+		}
+		if (accepted.length > 0) {
+			setJobs((prev) => [...prev, ...accepted]);
+			setStatus("Ready");
+		}
+		setIsDragging(false);
+	}
+
+	function setJobTarget(id, target) {
+		setJobs((prev) => prev.map((j) => (j.id === id ? { ...j, target } : j)));
+	}
+
+	function removeJob(id) {
+		setJobs((prev) => {
+			const job = prev.find((j) => j.id === id);
+			if (job?.result?.url) URL.revokeObjectURL(job.result.url);
+			return prev.filter((j) => j.id !== id);
+		});
+	}
+
+	async function handleConvertAll() {
+		if (isConverting || !workerRef.current) return;
+		const pending = jobs.filter((j) => j.status === "ready" || j.status === "error");
+		if (pending.length === 0) return;
+
+		setIsConverting(true);
+		runRef.current = {
+			total: pending.length,
+			done: 0,
+			failed: 0,
+			autoDownload: pending.length === 1,
+		};
+		setJobs((prev) =>
+			prev.map((j) =>
+				pending.some((p) => p.id === j.id)
+					? { ...j, status: "converting", progress: 0, error: null }
+					: j,
+			),
+		);
+		setStatus(`Converting… (0/${pending.length})`);
+
+		for (const job of pending) {
+			try {
+				// File size check
+				const limit = SIZE_LIMITS[job.category] || SIZE_LIMITS.data;
+				if (job.file.size > limit) {
+					const human = (n) => `${(n / 1024 / 1024).toFixed(1)} MB`;
+					const confirmMsg = `File is ${human(job.file.size)}, which exceeds the recommended limit of ${human(limit)} for ${job.category} files. Continue?`;
+					if (!window.confirm(confirmMsg)) {
+						runRef.current.failed += 1;
+						setJobs((prev) =>
+							prev.map((j) =>
+								j.id === job.id ? { ...j, status: "error", error: "skipped (over size limit)" } : j,
+							),
+						);
+						finishIfRunDone();
+						continue;
+					}
+				}
+
+				const messagePayload = {
+					action: "convert",
+					jobId: job.id,
+					filename: job.file.name,
+					target: job.target,
+					ext: job.ext,
+				};
+				sizeMapRef.current[job.id] = job.file.size;
+				if (LOSSY_TARGETS.includes(job.target)) {
+					messagePayload.quality = quality;
+				}
+				if (job.category === "audio" || job.category === "video") {
+					messagePayload.mediaOptions = { resolution, bitrate };
+				}
+				const isBinary =
+					job.ext === "xlsx" ||
+					job.ext === "xls" ||
+					job.category === "image" ||
+					job.category === "audio" ||
+					job.category === "video";
+				const transferList = [];
+
+				if (isBinary) {
+					const buffer = await job.file.arrayBuffer();
+					messagePayload.arrayBuffer = buffer;
+					transferList.push(buffer);
+				} else {
+					messagePayload.text = await job.file.text();
+				}
+
+				workerRef.current.postMessage(messagePayload, transferList);
+			} catch (err) {
+				runRef.current.failed += 1;
+				setJobs((prev) =>
+					prev.map((j) => (j.id === job.id ? { ...j, status: "error", error: err.message } : j)),
+				);
+				finishIfRunDone();
+			}
+		}
+	}
+
+	async function handleZip() {
+		const done = jobs.filter((j) => j.status === "done" && j.result?.blob);
+		if (done.length === 0) return;
+		const zip = new JSZip();
+		for (const j of done) {
+			zip.file(j.result.name, j.result.blob);
+		}
+		const zipBlob = await zip.generateAsync({ type: "blob", compression: "STORE" });
+		const url = URL.createObjectURL(zipBlob);
+		const a = document.createElement("a");
+		const stamp = new Date().toISOString().slice(0, 16).replace(/[-:T]/g, "");
+		a.href = url;
+		a.download = `ezconv-${stamp}.zip`;
+		document.body.appendChild(a);
+		a.click();
+		a.remove();
+		setTimeout(() => URL.revokeObjectURL(url), 1000);
+	}
 
 	const acceptString = ALL_EXTENSIONS.map((e) => `.${e}`).join(",");
+	const doneCount = jobs.filter((j) => j.status === "done").length;
+	const showQuality = jobs.some((j) => LOSSY_TARGETS.includes(j.target));
+	const isMedia = jobs.some((j) => [...VIDEO_EXTENSIONS, ...AUDIO_EXTENSIONS].includes(j.ext));
 
 	return (
 		<div className="min-h-screen bg-linear-to-br from-gray-900 to-slate-800 flex items-center justify-center p-6 text-gray-300">
 			{toast && (
 				<div className="fixed top-6 right-6 z-50">
-					<Toast
-						message={toast.message}
-						type={toast.type}
-						onClose={() => setToast(null)}
-					/>
+					<Toast message={toast.message} type={toast.type} onClose={() => setToast(null)} />
 				</div>
 			)}
 			<div className="w-full max-w-2xl bg-gray-800 p-8 rounded-lg shadow-lg">
-				<h1 className="text-3xl font-bold mb-2 text-gray-100">
-					ezconv - convert anything!
-				</h1>
+				<h1 className="text-3xl font-bold mb-2 text-gray-100">ezconv - convert anything!</h1>
 				<p className="text-sm text-gray-400 mb-6">
-					Convert images, audio, video, and data files instantly. No uploads, no
-					backend.
+					Convert images, audio, video, and data files instantly. No uploads, no backend.
 				</p>
 
 				{ffmpegLoading && (
@@ -246,18 +398,10 @@ export default function App() {
 						<div className="flex items-center justify-between">
 							<div>
 								<div className="font-medium">
-									Loading FFmpeg (approx. 28 MB)
+									Loading FFmpeg core (~28 MB, served from this server)
 								</div>
 								<div className="text-xs text-yellow-700">
 									First media conversion may take a while.
-								</div>
-							</div>
-							<div className="ml-4 w-40">
-								<div className="h-2 bg-yellow-200 rounded overflow-hidden">
-									<div
-										className="h-2 bg-yellow-400"
-										style={{ width: `${Math.round(ffmpegProgress * 100)}%` }}
-									/>
 								</div>
 							</div>
 						</div>
@@ -265,92 +409,86 @@ export default function App() {
 				)}
 
 				<div className="space-y-4">
-					{/** biome-ignore lint/a11y/noStaticElementInteractions: false */}
-					<div
-						onDragOver={(e) => {
-							if (isConverting) return;
-							e.preventDefault();
-							setIsDragging(true);
-						}}
-						onDragLeave={() => {
-							if (!isConverting) setIsDragging(false);
-						}}
-						onDrop={(e) => {
-							if (isConverting) return;
-							e.preventDefault();
-							handleFile(e);
-						}}
-						className={`border-2 border-dashed rounded-lg p-8 text-center transition-colors ${
-							isDragging
-								? "border-blue-500 bg-blue-900/20"
-								: "border-gray-600 bg-gray-700/50"
-						}
-						${isConverting ? " opacity-60 pointer-events-none" : ""}`}
-					>
-						<div className="mb-3 text-3xl">📄</div>
-						<label className="block cursor-pointer">
-							<span className="text-sm font-medium text-gray-300">
-								Drag & drop a file here or
-							</span>
-							<input
-								onChange={handleFile}
-								className="hidden"
-								type="file"
-								accept={acceptString}
-								disabled={isConverting}
-							/>
-							<span className="text-blue-600 hover:underline ml-1">browse</span>
-						</label>
-						<p className="text-xs text-gray-400 mt-2">
-							Data, Images, Audio, or Video
-						</p>
-					</div>
+					<DropZone
+						onFiles={addFiles}
+						disabled={isConverting}
+						isDragging={isDragging}
+						setIsDragging={setIsDragging}
+						inputRef={inputRef}
+						acceptString={acceptString}
+					/>
 
-					{file && (
-						<div className="bg-gray-700 border border-gray-600 rounded-lg p-4">
-							<div className="flex items-center justify-between">
-								<div>
-									<p className="text-sm font-medium text-gray-200">
-										{file.name}
-									</p>
-									<p className="text-xs text-gray-400">
-										{(file.size / 1024).toFixed(2)} KB · Detected:{" "}
-										<span className="font-semibold">{ext.toUpperCase()}</span>
-									</p>
-								</div>
-								<button
-									type="button"
-									onClick={handleReset}
-									className="text-gray-500 hover:text-gray-300"
-								>
-									✕
-								</button>
-							</div>
+					{jobs.map((job) => (
+						<JobRow
+							key={job.id}
+							job={job}
+							disabled={isConverting}
+							onTarget={setJobTarget}
+							onRemove={removeJob}
+						/>
+					))}
+
+					{showQuality && (
+						<div>
+							<label
+								htmlFor="quality-range"
+								className="text-sm text-gray-300 font-medium block mb-2"
+							>
+								Quality: {Math.round(quality * 100)}% (jpg / webp)
+							</label>
+							<input
+								id="quality-range"
+								type="range"
+								min="50"
+								max="100"
+								step="5"
+								value={Math.round(quality * 100)}
+								onChange={(e) => setQuality(Number(e.target.value) / 100)}
+								disabled={isConverting}
+								className="w-full accent-blue-500"
+							/>
 						</div>
 					)}
 
-					{file && (
-						<div className="flex gap-3 items-end">
+					{isMedia && (
+						<div className="flex gap-3">
 							<div className="flex-1">
 								<label
-									htmlFor="target-select"
+									htmlFor="resolution-select"
 									className="text-sm text-gray-300 font-medium block mb-2"
 								>
-									Convert to
+									Max resolution
 								</label>
 								<select
-									id="target-select"
+									id="resolution-select"
 									className="w-full border border-gray-600 bg-gray-700 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
-									value={target}
-									onChange={(e) => setTarget(e.target.value)}
+									value={resolution}
+									onChange={(e) => setResolution(e.target.value)}
 									disabled={isConverting}
 								>
-									<option value="">Select format</option>
-									{options.map((o) => (
-										<option key={o} value={o}>
-											{o.toUpperCase()}
-										</option>
-									))}
+									<option value="original">Original</option>
+									<option value="1080">1080p</option>
+									<option value="720">720p</option>
+									<option value="480">480p</option>
+								</select>
+							</div>
+							<div className="flex-1">
+								<label
+									htmlFor="bitrate-select"
+									className="text-sm text-gray-300 font-medium block mb-2"
+								>
+									Audio bitrate
+								</label>
+								<select
+									id="bitrate-select"
+									className="w-full border border-gray-600 bg-gray-700 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+									value={bitrate}
+									onChange={(e) => setBitrate(Number(e.target.value))}
+									disabled={isConverting}
+								>
+									<option value={128}>128 kbps</option>
+									<option value={192}>192 kbps</option>
+									<option value={256}>256 kbps</option>
 								</select>
 							</div>
 						</div>
@@ -359,12 +497,22 @@ export default function App() {
 					<div className="flex gap-3">
 						<button
 							type="button"
-							onClick={handleConvert}
+							onClick={handleConvertAll}
 							className="flex-1 bg-blue-600 text-white px-4 py-2 rounded-lg font-medium hover:bg-blue-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
-							disabled={!file || !target || isConverting}
+							disabled={isConverting || jobs.length === 0}
 						>
-							Convert
+							{jobs.length > 1 ? "Convert all" : "Convert"}
 						</button>
+						{doneCount >= 2 && (
+							<button
+								type="button"
+								onClick={handleZip}
+								disabled={isConverting}
+								className="px-4 py-2 bg-blue-600 text-white rounded-lg font-medium hover:bg-blue-700 transition-colors disabled:opacity-50"
+							>
+								Download ZIP
+							</button>
+						)}
 						<button
 							type="button"
 							onClick={handleReset}
@@ -378,43 +526,25 @@ export default function App() {
 					{status !== "Idle" && (
 						<div className="text-sm text-gray-300 bg-gray-700/50 p-3 rounded">
 							<span className="font-medium">Status:</span> {status}
+							{isConverting && ffmpegProgress > 0 && (
+								<span> {Math.round(ffmpegProgress * 100)}%</span>
+							)}
 						</div>
 					)}
 
-					{/* Logs and FFmpeg console */}
-					{[...VIDEO_EXTENSIONS, ...AUDIO_EXTENSIONS].includes(ext) && (
-						<>
-							<div className="flex items-center justify-between mt-2">
-								<div className="text-xs text-gray-400">FFmpeg logs</div>
-								<button
-									type="button"
-									className="text-xs text-blue-600 underline"
-									onClick={() => setShowLogs((s) => !s)}
-								>
-									{showLogs ? "Hide logs" : "Show logs"}
-								</button>
-							</div>
+					<ResultCard result={result} copied={copied} onCopy={handleCopy} />
 
-							{showLogs && (
-								<div className="mt-2 bg-black text-white text-xs rounded p-2 max-h-40 overflow-auto">
-									{ffmpegLogs.length === 0 ? (
-										<div className="opacity-60">No logs yet.</div>
-									) : (
-										ffmpegLogs.map((l, i) => (
-											// biome-ignore lint/suspicious/noArrayIndexKey: no other way
-											<div key={i} className="whitespace-pre-wrap">
-												{l}
-											</div>
-										))
-									)}
-								</div>
-							)}
-						</>
+					{/* Logs and FFmpeg console */}
+					{isMedia && (
+						<LogsPanel
+							logs={ffmpegLogs}
+							showLogs={showLogs}
+							onToggle={() => setShowLogs((s) => !s)}
+						/>
 					)}
 
 					<div className="text-xs text-gray-500 border-t border-gray-700 pt-4">
-						🔒 Files never leave your browser. Conversion runs in a Web Worker
-						for instant results.
+						🔒 Files never leave your browser. Conversion runs in a Web Worker for instant results.
 					</div>
 				</div>
 			</div>
