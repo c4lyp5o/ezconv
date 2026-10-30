@@ -12,6 +12,25 @@ function getFileExtension(filename) {
 	return filename.slice(((filename.lastIndexOf(".") - 1) >>> 0) + 2).toLowerCase();
 }
 
+function humanBytes(n) {
+	if (!Number.isFinite(n) || n < 0) return "0 B";
+	const units = ["B", "KB", "MB", "GB"];
+	let v = n;
+	let i = 0;
+	while (v >= 1024 && i < units.length - 1) {
+		v /= 1024;
+		i += 1;
+	}
+	return `${v.toFixed(i === 0 ? 0 : 1)} ${units[i]}`;
+}
+
+// signed percentage change from -> to, e.g. "-34%" or "+12%"
+function sizeNote(from, to) {
+	if (!from || !to) return "";
+	const pct = Math.round((1 - to / from) * 100);
+	return pct >= 0 ? `-${pct}%` : `+${-pct}%`;
+}
+
 function Toast({ message, type, onClose }) {
 	useEffect(() => {
 		const timer = setTimeout(onClose, 4000);
@@ -38,6 +57,8 @@ export default function App() {
 	const [toast, setToast] = useState(null);
 	const [isDragging, setIsDragging] = useState(false);
 	const workerRef = useRef(null);
+	// the worker's onmessage closes over the first render — carry sizes via ref
+	const inputSizeRef = useRef(0);
 
 	// explicit busy flag: status text is display-only, the UI locks off this
 	const [isConverting, setIsConverting] = useState(false);
@@ -94,9 +115,12 @@ export default function App() {
 				case "done": {
 					setStatus("Done");
 					setIsConverting(false);
+					setFfmpegProgress(0);
 					const note = warnings?.length ? ` (${warnings.join("; ")})` : "";
 					setToast({
-						message: `✓ Conversion successful!${note}`,
+						message: `✓ ${humanBytes(inputSizeRef.current)} → ${humanBytes(
+							buffer?.byteLength,
+						)} (${sizeNote(inputSizeRef.current, buffer?.byteLength)})${note}`,
 						type: "success",
 					});
 					const blob = new Blob([buffer], {
@@ -116,6 +140,7 @@ export default function App() {
 				case "error":
 					setStatus("Error");
 					setIsConverting(false);
+					setFfmpegProgress(0);
 					setToast({ message: `✗ Error: ${message}`, type: "error" });
 					break;
 			}
@@ -152,6 +177,7 @@ export default function App() {
 		}
 		setFile(f);
 		setExt(newExt);
+		inputSizeRef.current = f.size;
 		setIsDragging(false);
 
 		// Set reasonable default targets based on file type
@@ -380,7 +406,21 @@ export default function App() {
 						<div className="text-sm text-gray-300 bg-gray-700/50 p-3 rounded">
 							<span className="font-medium">Status:</span> {status}
 							{isConverting && ffmpegProgress > 0 && (
-								<span> {Math.round(ffmpegProgress * 100)}%</span>
+								<>
+									<span> {Math.round(ffmpegProgress * 100)}%</span>
+									<div
+										className="mt-2 h-2 w-full overflow-hidden rounded bg-gray-600"
+										role="progressbar"
+										aria-valuemin={0}
+										aria-valuemax={100}
+										aria-valuenow={Math.round(ffmpegProgress * 100)}
+									>
+										<div
+											className="h-2 rounded bg-blue-500 transition-all"
+											style={{ width: `${Math.round(ffmpegProgress * 100)}%` }}
+										/>
+									</div>
+								</>
 							)}
 						</div>
 					)}
