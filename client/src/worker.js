@@ -1,14 +1,9 @@
+import wasmURL from "@ffmpeg/core/wasm?url";
+import coreURL from "@ffmpeg/core?url";
+import { FFmpeg } from "@ffmpeg/ffmpeg";
 import Papa from "papaparse";
 import * as XLSX from "xlsx";
-import { FFmpeg } from "@ffmpeg/ffmpeg";
-import coreURL from "@ffmpeg/core?url";
-import wasmURL from "@ffmpeg/core/wasm?url";
-import {
-	IMAGE_EXTENSIONS,
-	AUDIO_EXTENSIONS,
-	VIDEO_EXTENSIONS,
-	imageMimeFor,
-} from "./file-config";
+import { AUDIO_EXTENSIONS, IMAGE_EXTENSIONS, imageMimeFor, VIDEO_EXTENSIONS } from "./file-config";
 
 const MEDIA_EXTENSIONS = [...AUDIO_EXTENSIONS, ...VIDEO_EXTENSIONS];
 
@@ -18,8 +13,7 @@ let ffmpegInstance = null;
 // Serialize a workbook to xlsx bytes (exact slice — no slack from pooled buffers)
 const writeWorkbookFile = (wb) => {
 	const data = XLSX.write(wb, { bookType: "xlsx", type: "array" });
-	const mime =
-		"application/vnd.openxmlformats-officedocument.spreadsheetml.sheet";
+	const mime = "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet";
 	const outBuffer = ArrayBuffer.isView(data)
 		? data.buffer.slice(data.byteOffset, data.byteOffset + data.byteLength)
 		: data;
@@ -50,9 +44,7 @@ const convertImage = async (arrayBuffer, fromExt, toExt) => {
 		return await outBlob.arrayBuffer();
 	} catch (err) {
 		console.error("[worker] Image conversion failed", err);
-		throw new Error(
-			"Image conversion failed. The format may not be supported.",
-		);
+		throw new Error("Image conversion failed. The format may not be supported.");
 	}
 };
 
@@ -110,15 +102,11 @@ const convertMedia = async (arrayBuffer, fromExt, toExt) => {
 		// If same extension/container and no re-encode needed, try a stream copy first
 		const tryCopy =
 			fromExt === toExt &&
-			(MEDIA_EXTENSIONS.includes(fromExt) ||
-				IMAGE_EXTENSIONS.includes(fromExt));
+			(MEDIA_EXTENSIONS.includes(fromExt) || IMAGE_EXTENSIONS.includes(fromExt));
 		if (tryCopy) {
 			// attempt container/codec copy (fast, low memory)
 			args.push("-c", "copy", outputName);
-		} else if (
-			VIDEO_EXTENSIONS.includes(fromExt) ||
-			VIDEO_EXTENSIONS.includes(toExt)
-		) {
+		} else if (VIDEO_EXTENSIONS.includes(fromExt) || VIDEO_EXTENSIONS.includes(toExt)) {
 			// For video conversions, use conservative defaults to reduce memory:
 			// - single thread (-threads 1)
 			// - downscale to max width 1280 to reduce working memory
@@ -201,9 +189,7 @@ const convertMedia = async (arrayBuffer, fromExt, toExt) => {
 		return outBuffer;
 	} catch (err) {
 		console.error("[worker] Media conversion failed", err);
-		throw new Error(
-			`Media conversion failed: ${err.message}. Please try another format.`,
-		);
+		throw new Error(`Media conversion failed: ${err.message}. Please try another format.`);
 	}
 };
 
@@ -217,10 +203,7 @@ const handleConvert = async ({ filename, target, ext, text, arrayBuffer }) => {
 		if (ext === "json") {
 			let json;
 			try {
-				const src =
-					typeof text === "string"
-						? text
-						: new TextDecoder().decode(arrayBuffer);
+				const src = typeof text === "string" ? text : new TextDecoder().decode(arrayBuffer);
 				json = JSON.parse(src);
 			} catch (err) {
 				throw new Error(`Invalid JSON input: ${err.message || String(err)}`);
@@ -246,8 +229,7 @@ const handleConvert = async ({ filename, target, ext, text, arrayBuffer }) => {
 				({ mime, outBuffer } = createXlsxFile(XLSX.utils.json_to_sheet(rows)));
 			}
 		} else if (ext === "csv") {
-			const csvText =
-				typeof text === "string" ? text : new TextDecoder().decode(arrayBuffer);
+			const csvText = typeof text === "string" ? text : new TextDecoder().decode(arrayBuffer);
 			if (target === "json") {
 				let res;
 				try {
@@ -274,9 +256,7 @@ const handleConvert = async ({ filename, target, ext, text, arrayBuffer }) => {
 			const ws = wb.Sheets[first];
 			// xlsx target re-emits every sheet; json/csv can only carry one
 			if (target !== "xlsx" && wb.SheetNames.length > 1) {
-				warnings.push(
-					`${wb.SheetNames.length} sheets found — only "${first}" was exported`,
-				);
+				warnings.push(`${wb.SheetNames.length} sheets found — only "${first}" was exported`);
 			}
 			if (target === "json") {
 				const json = XLSX.utils.sheet_to_json(ws, { defval: null });
@@ -326,10 +306,9 @@ const handleConvert = async ({ filename, target, ext, text, arrayBuffer }) => {
 		}
 
 		// Transfer the array buffer back to the main thread
-		postMessage(
-			{ status: "done", filename: outName, buffer: outBuffer, mime, warnings },
-			[outBuffer],
-		);
+		postMessage({ status: "done", filename: outName, buffer: outBuffer, mime, warnings }, [
+			outBuffer,
+		]);
 	} catch (err) {
 		postMessage({ status: "error", message: err.message || String(err) });
 		console.error("[worker] Conversion error", err);

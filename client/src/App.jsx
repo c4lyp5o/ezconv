@@ -1,17 +1,15 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import {
-	getFileCategory,
 	ALL_EXTENSIONS,
 	AUDIO_EXTENSIONS,
 	CANVAS_OUTPUT_EXTENSIONS,
 	DATA_EXTENSIONS,
+	getFileCategory,
 	VIDEO_EXTENSIONS,
 } from "./file-config";
 
 function getFileExtension(filename) {
-	return filename
-		.slice(((filename.lastIndexOf(".") - 1) >>> 0) + 2)
-		.toLowerCase();
+	return filename.slice(((filename.lastIndexOf(".") - 1) >>> 0) + 2).toLowerCase();
 }
 
 function Toast({ message, type, onClose }) {
@@ -64,8 +62,7 @@ export default function App() {
 		});
 		workerRef.current = w;
 		w.onmessage = (e) => {
-			const { status, message, ratio, buffer, mime, filename, warnings } =
-				e.data;
+			const { status, message, ratio, buffer, mime, filename, warnings } = e.data;
 
 			switch (status) {
 				case "ffmpeg-loading":
@@ -252,20 +249,13 @@ export default function App() {
 		<div className="min-h-screen bg-linear-to-br from-gray-900 to-slate-800 flex items-center justify-center p-6 text-gray-300">
 			{toast && (
 				<div className="fixed top-6 right-6 z-50">
-					<Toast
-						message={toast.message}
-						type={toast.type}
-						onClose={() => setToast(null)}
-					/>
+					<Toast message={toast.message} type={toast.type} onClose={() => setToast(null)} />
 				</div>
 			)}
 			<div className="w-full max-w-2xl bg-gray-800 p-8 rounded-lg shadow-lg">
-				<h1 className="text-3xl font-bold mb-2 text-gray-100">
-					ezconv - convert anything!
-				</h1>
+				<h1 className="text-3xl font-bold mb-2 text-gray-100">ezconv - convert anything!</h1>
 				<p className="text-sm text-gray-400 mb-6">
-					Convert images, audio, video, and data files instantly. No uploads, no
-					backend.
+					Convert images, audio, video, and data files instantly. No uploads, no backend.
 				</p>
 
 				{ffmpegLoading && (
@@ -273,8 +263,7 @@ export default function App() {
 						<div className="flex items-center justify-between">
 							<div>
 								<div className="font-medium">
-									Loading FFmpeg core (~28 MB, served from this
-									server)
+									Loading FFmpeg core (~28 MB, served from this server)
 								</div>
 								<div className="text-xs text-yellow-700">
 									First media conversion may take a while.
@@ -309,17 +298,13 @@ export default function App() {
 							handleFile(e);
 						}}
 						className={`border-2 border-dashed rounded-lg p-8 text-center transition-colors ${
-							isDragging
-								? "border-blue-500 bg-blue-900/20"
-								: "border-gray-600 bg-gray-700/50"
+							isDragging ? "border-blue-500 bg-blue-900/20" : "border-gray-600 bg-gray-700/50"
 						}
 						${isConverting ? " opacity-60 pointer-events-none" : ""}`}
 					>
 						<div className="mb-3 text-3xl">📄</div>
 						<label className="block cursor-pointer">
-							<span className="text-sm font-medium text-gray-300">
-								Drag & drop a file here or
-							</span>
+							<span className="text-sm font-medium text-gray-300">Drag & drop a file here or</span>
 							<input
 								onChange={handleFile}
 								className="hidden"
@@ -329,18 +314,14 @@ export default function App() {
 							/>
 							<span className="text-blue-600 hover:underline ml-1">browse</span>
 						</label>
-						<p className="text-xs text-gray-400 mt-2">
-							Data, Images, Audio, or Video
-						</p>
+						<p className="text-xs text-gray-400 mt-2">Data, Images, Audio, or Video</p>
 					</div>
 
 					{file && (
 						<div className="bg-gray-700 border border-gray-600 rounded-lg p-4">
 							<div className="flex items-center justify-between">
 								<div>
-									<p className="text-sm font-medium text-gray-200">
-										{file.name}
-									</p>
+									<p className="text-sm font-medium text-gray-200">{file.name}</p>
 									<p className="text-xs text-gray-400">
 										{(file.size / 1024).toFixed(2)} KB · Detected:{" "}
 										<span className="font-semibold">{ext.toUpperCase()}</span>
@@ -441,8 +422,7 @@ export default function App() {
 					)}
 
 					<div className="text-xs text-gray-500 border-t border-gray-700 pt-4">
-						🔒 Files never leave your browser. Conversion runs in a Web Worker
-						for instant results.
+						🔒 Files never leave your browser. Conversion runs in a Web Worker for instant results.
 					</div>
 				</div>
 			</div>

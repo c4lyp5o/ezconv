@@ -1,9 +1,5 @@
-import { describe, it, expect } from "vitest";
-import {
-	CANVAS_OUTPUT_EXTENSIONS,
-	getFileCategory,
-	imageMimeFor,
-} from "../src/file-config";
+import { describe, expect, it } from "vitest";
+import { CANVAS_OUTPUT_EXTENSIONS, getFileCategory, imageMimeFor } from "../src/file-config";
 
 describe("image format honesty", () => {
 	it("maps extensions to the real MIME types canvas honors", () => {

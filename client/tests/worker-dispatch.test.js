@@ -1,4 +1,4 @@
-import { describe, it, expect, beforeAll } from "vitest";
+import { beforeAll, describe, expect, it } from "vitest";
 import * as XLSX from "xlsx";
 
 // Capture worker -> UI messages, then load the REAL worker module
@@ -39,9 +39,7 @@ describe("worker dispatch: spreadsheet conversions", () => {
 			["Sheet1", [{ a: 1 }]],
 			["Sheet2", [{ b: 2 }]],
 		]);
-		const xlsArr = new Uint8Array(
-			XLSX.write(wb, { bookType: "xls", type: "array" }),
-		);
+		const xlsArr = new Uint8Array(XLSX.write(wb, { bookType: "xls", type: "array" }));
 		const out = await drive({
 			filename: "book.xls",
 			target: "xlsx",
@@ -92,10 +90,7 @@ describe("worker dispatch: spreadsheet conversions", () => {
 		});
 
 		const t0 = Date.now();
-		while (
-			sent.filter((m) => m.status === "done").length < 2 &&
-			Date.now() - t0 < 5000
-		) {
+		while (sent.filter((m) => m.status === "done").length < 2 && Date.now() - t0 < 5000) {
 			await new Promise((r) => setTimeout(r, 5));
 		}
 		const dones = sent.filter((m) => m.status === "done");
@@ -180,8 +175,7 @@ describe("worker dispatch: data-loss warnings", () => {
 			["Sheet1", [{ a: 1 }]],
 			["Sheet2", [{ b: 2 }]],
 		]);
-		return new Uint8Array(XLSX.write(wb, { bookType: "xls", type: "array" }))
-			.buffer;
+		return new Uint8Array(XLSX.write(wb, { bookType: "xls", type: "array" })).buffer;
 	};
 
 	it("warns when a multi-sheet workbook exports only its first sheet", async () => {

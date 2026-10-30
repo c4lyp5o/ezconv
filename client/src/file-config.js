@@ -1,12 +1,4 @@
-export const IMAGE_EXTENSIONS = [
-	"jpg",
-	"jpeg",
-	"png",
-	"gif",
-	"webp",
-	"bmp",
-	"svg",
-];
+export const IMAGE_EXTENSIONS = ["jpg", "jpeg", "png", "gif", "webp", "bmp", "svg"];
 export const AUDIO_EXTENSIONS = ["mp3", "wav", "aac", "flac", "ogg", "m4a"];
 export const VIDEO_EXTENSIONS = ["mp4", "avi", "mkv", "mov", "webm", "flv"];
 export const DATA_EXTENSIONS = ["json", "csv", "xlsx", "xls"];
