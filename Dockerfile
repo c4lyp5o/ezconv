@@ -37,6 +37,9 @@ COPY --from=builder /app/dist ./dist
 # static server needs no privileges
 USER bun
 
+# inside the container the published port IS the boundary — bind all interfaces
+ENV HOST=0.0.0.0
+
 EXPOSE 5000
 
 CMD ["bun", "start"]

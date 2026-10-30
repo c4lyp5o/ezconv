@@ -1,9 +1,12 @@
 import { serve } from "bun";
 
 const PORT = Number(process.env.PORT) || 5000;
+// loopback by default; set HOST=0.0.0.0 to serve the LAN (phone test-drives)
+const HOST = process.env.HOST || "127.0.0.1";
 
 serve({
 	port: PORT,
+	hostname: HOST,
 	async fetch(req) {
 		const url = new URL(req.url);
 		let path = url.pathname;
@@ -32,4 +35,4 @@ serve({
 	},
 });
 
-console.log(`Server running: http://localhost:${PORT}`);
+console.log(`Server running: http://${HOST === "0.0.0.0" ? "localhost" : HOST}:${PORT}`);
