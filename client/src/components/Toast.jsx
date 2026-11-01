@@ -1,4 +1,5 @@
 import { useEffect } from "react";
+import { Notice } from "../ez/ui";
 
 export default function Toast({ message, type, onClose }) {
 	useEffect(() => {
@@ -6,14 +7,9 @@ export default function Toast({ message, type, onClose }) {
 		return () => clearTimeout(timer);
 	}, [onClose]);
 
-	const bgColor = type === "success" ? "bg-green-500" : "bg-red-500";
-
 	return (
-		<div
-			className={`${bgColor} text-white px-4 py-3 rounded shadow-lg animate-fade-in`}
-			role="alert"
-		>
-			{message}
-		</div>
+		<Notice tone={type === "success" ? "ok" : "bad"} onClose={onClose}>
+			{message.replace(/^[✓✗]\s*/, "")}
+		</Notice>
 	);
 }
