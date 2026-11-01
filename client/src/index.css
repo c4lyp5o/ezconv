@@ -1,25 +1,9 @@
 @import "tailwindcss";
+@import "./ez/ez.css";
+@source not "../../dist";
 
-@keyframes fade-in {
-	from {
-		opacity: 0;
-		transform: translateY(-10px);
-	}
-	to {
-		opacity: 1;
-		transform: translateY(0);
-	}
-}
-
-.animate-fade-in {
-	animation: fade-in 0.3s ease-out;
-}
-
-@media (prefers-reduced-motion: reduce) {
-	* {
-		/* biome-ignore lint/complexity/noImportantStyles: reduced motion must win */
-		animation-duration: 0.01ms !important;
-		/* biome-ignore lint/complexity/noImportantStyles: reduced motion must win */
-		transition-duration: 0.01ms !important;
-	}
+/* ezconv's accent: the ezdyndns blue — one accent, on data and selection only. */
+:root {
+	--ez-accent-light: #1d5fa8;
+	--ez-accent-dark: #4a8ad6;
 }
