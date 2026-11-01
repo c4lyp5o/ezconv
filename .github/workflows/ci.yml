@@ -1,10 +1,10 @@
 # One workflow, both branches (ala ezhrm).
 #
 #   test    the gate — Biome, the client suite (vitest, incl. the real worker
-#           dispatch harness) and the vite build. Runs on pushes to main and
+#           dispatch harness) and the vite build. Runs on pushes to master and
 #           development, on PRs, and on demand.
 #   image   GHCR build, only on push, only if `test` passed. The tags say
-#           which branch produced the image, so main and development can never
+#           which branch produced the image, so master and development can never
 #           be confused:
 #             main         -> :main, :latest, :sha-<12>
 #             development  -> :development, :sha-<12>   (never :latest)
@@ -15,10 +15,10 @@ name: CI
 
 on:
   push:
-    branches: [main, development]
+    branches: [master, development]
     tags: ["v*"]
   pull_request:
-    branches: [main, development]
+    branches: [master, development]
   workflow_dispatch:
 
 concurrency:
@@ -86,7 +86,7 @@ jobs:
             echo "tags<<EOF"
             echo "${img}:sha-${sha}"
             case "${GITHUB_REF}" in
-              refs/heads/main)        echo "${img}:main"; echo "${img}:latest" ;;
+              refs/heads/master)      echo "${img}:master"; echo "${img}:latest" ;;
               refs/heads/development) echo "${img}:development" ;;
               refs/tags/*)            echo "${img}:${GITHUB_REF_NAME}" ;;
             esac
