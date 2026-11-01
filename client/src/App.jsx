@@ -5,6 +5,32 @@ import JobRow from "./components/JobRow";
 import LogsPanel from "./components/LogsPanel";
 import ResultCard from "./components/ResultCard";
 import Toast from "./components/Toast";
+import {
+	AnimatePresence,
+	Bar,
+	Collapse,
+	motion,
+	SlideRow,
+	Stagger,
+	StaggerItem,
+	spring,
+} from "./ez/motion";
+import { Brand, Shell } from "./ez/Shell";
+import {
+	btn,
+	Chip,
+	cx,
+	Dot,
+	Kbd,
+	Loading,
+	labelCls,
+	Notice,
+	panel,
+	SectionLabel,
+	Spinner,
+	Stat,
+	selectCls,
+} from "./ez/ui";
 import { ALL_EXTENSIONS, AUDIO_EXTENSIONS, getFileCategory, VIDEO_EXTENSIONS } from "./file-config";
 import { defaultTargetFor, getFileExtension, humanBytes, sizeNote } from "./format";
 
@@ -380,35 +406,47 @@ export default function App() {
 	const showQuality = jobs.some((j) => LOSSY_TARGETS.includes(j.target));
 	const isMedia = jobs.some((j) => [...VIDEO_EXTENSIONS, ...AUDIO_EXTENSIONS].includes(j.ext));
 
+	const failedCount = jobs.filter((j) => j.status === "error").length;
+	const totalBytes = jobs.reduce((n, j) => n + j.file.size, 0);
+
 	return (
-		<div className="min-h-screen bg-linear-to-br from-gray-900 to-slate-800 flex items-center justify-center p-6 text-gray-300">
-			{toast && (
-				<div className="fixed top-6 right-6 z-50">
-					<Toast message={toast.message} type={toast.type} onClose={() => setToast(null)} />
-				</div>
-			)}
-			<div className="w-full max-w-2xl bg-gray-800 p-8 rounded-lg shadow-lg">
-				<h1 className="text-3xl font-bold mb-2 text-gray-100">ezconv - convert anything!</h1>
-				<p className="text-sm text-gray-400 mb-6">
-					Convert images, audio, video, and data files instantly. No uploads, no backend.
-				</p>
+		<Shell
+			brand={<Brand name="ezconv" glyph="cv" scope="Runs in your browser" />}
+			title="Convert"
+			sub="Images, audio, video and data files. Nothing is uploaded."
+			width="max-w-[1120px]"
+		>
+			<div className="pointer-events-none fixed top-16 right-4 z-50 w-[min(380px,calc(100vw-2rem))]">
+				<AnimatePresence>
+					{toast && (
+						<motion.div
+							key={toast.message}
+							className="pointer-events-auto"
+							initial={{ opacity: 0, y: -8 }}
+							animate={{ opacity: 1, y: 0 }}
+							exit={{ opacity: 0, x: 16 }}
+							transition={spring}
+						>
+							<Toast message={toast.message} type={toast.type} onClose={() => setToast(null)} />
+						</motion.div>
+					)}
+				</AnimatePresence>
+			</div>
 
-				{ffmpegLoading && (
-					<div className="mb-4 p-3 bg-yellow-50 border-l-4 border-yellow-400 text-sm text-yellow-700">
-						<div className="flex items-center justify-between">
-							<div>
-								<div className="font-medium">
-									Loading FFmpeg core (~28 MB, served from this server)
-								</div>
-								<div className="text-xs text-yellow-700">
-									First media conversion may take a while.
-								</div>
+			<Stagger className="grid gap-6 lg:grid-cols-[minmax(0,1fr)_320px]">
+				<StaggerItem className="space-y-4">
+					<Collapse open={ffmpegLoading}>
+						<Notice tone="warn">
+							<div className="font-medium">
+								Loading the FFmpeg core (about 28 MB, served from this server)
 							</div>
-						</div>
-					</div>
-				)}
+							<div className="mt-0.5 text-[12px] text-mute">
+								The first media conversion takes a moment.
+							</div>
+							<Loading label="Fetching ffmpeg-core.wasm" className="items-start py-3" />
+						</Notice>
+					</Collapse>
 
-				<div className="space-y-4">
 					<DropZone
 						onFiles={addFiles}
 						disabled={isConverting}
@@ -416,91 +454,104 @@ export default function App() {
 						setIsDragging={setIsDragging}
 						inputRef={inputRef}
 						acceptString={acceptString}
+						empty={jobs.length === 0}
 					/>
 
-					{jobs.map((job) => (
-						<JobRow
-							key={job.id}
-							job={job}
-							disabled={isConverting}
-							onTarget={setJobTarget}
-							onRemove={removeJob}
-						/>
-					))}
-
-					{showQuality && (
-						<div>
-							<label
-								htmlFor="quality-range"
-								className="text-sm text-gray-300 font-medium block mb-2"
-							>
-								Quality: {Math.round(quality * 100)}% (jpg / webp)
-							</label>
-							<input
-								id="quality-range"
-								type="range"
-								min="50"
-								max="100"
-								step="5"
-								value={Math.round(quality * 100)}
-								onChange={(e) => setQuality(Number(e.target.value) / 100)}
-								disabled={isConverting}
-								className="w-full accent-blue-500"
-							/>
-						</div>
+					{jobs.length > 0 && (
+						<section className={panel}>
+							<header className="flex items-center gap-3 border-b border-line px-5 py-3">
+								<SectionLabel>Files</SectionLabel>
+								<span className="font-mono text-[12px] text-mute">
+									{jobs.length.toLocaleString("en-US")}
+								</span>
+							</header>
+							<div className="divide-y divide-line">
+								<AnimatePresence initial={false}>
+									{jobs.map((job) => (
+										<SlideRow key={job.id}>
+											<JobRow
+												job={job}
+												disabled={isConverting}
+												onTarget={setJobTarget}
+												onRemove={removeJob}
+											/>
+										</SlideRow>
+									))}
+								</AnimatePresence>
+							</div>
+						</section>
 					)}
 
-					{isMedia && (
-						<div className="flex gap-3">
-							<div className="flex-1">
-								<label
-									htmlFor="resolution-select"
-									className="text-sm text-gray-300 font-medium block mb-2"
-								>
-									Max resolution
-								</label>
-								<select
-									id="resolution-select"
-									className="w-full border border-gray-600 bg-gray-700 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
-									value={resolution}
-									onChange={(e) => setResolution(e.target.value)}
-									disabled={isConverting}
-								>
-									<option value="original">Original</option>
-									<option value="1080">1080p</option>
-									<option value="720">720p</option>
-									<option value="480">480p</option>
-								</select>
-							</div>
-							<div className="flex-1">
-								<label
-									htmlFor="bitrate-select"
-									className="text-sm text-gray-300 font-medium block mb-2"
-								>
-									Audio bitrate
-								</label>
-								<select
-									id="bitrate-select"
-									className="w-full border border-gray-600 bg-gray-700 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
-									value={bitrate}
-									onChange={(e) => setBitrate(Number(e.target.value))}
-									disabled={isConverting}
-								>
-									<option value={128}>128 kbps</option>
-									<option value={192}>192 kbps</option>
-									<option value={256}>256 kbps</option>
-								</select>
-							</div>
-						</div>
-					)}
+					<Collapse open={showQuality || isMedia}>
+						<section className={`${panel} space-y-4 p-5`}>
+							<SectionLabel>Output</SectionLabel>
+							{showQuality && (
+								<div>
+									<label htmlFor="quality-range" className={labelCls}>
+										Quality <span className="font-mono text-ink">{Math.round(quality * 100)}%</span>{" "}
+										(JPG and WebP)
+									</label>
+									<input
+										id="quality-range"
+										type="range"
+										min="50"
+										max="100"
+										step="5"
+										value={Math.round(quality * 100)}
+										onChange={(e) => setQuality(Number(e.target.value) / 100)}
+										disabled={isConverting}
+										className="w-full"
+									/>
+								</div>
+							)}
+							{isMedia && (
+								<div className="grid gap-3 sm:grid-cols-2">
+									<div>
+										<label htmlFor="resolution-select" className={labelCls}>
+											Maximum resolution
+										</label>
+										<select
+											id="resolution-select"
+											className={selectCls}
+											value={resolution}
+											onChange={(e) => setResolution(e.target.value)}
+											disabled={isConverting}
+										>
+											<option value="original">Original</option>
+											<option value="1080">1080p</option>
+											<option value="720">720p</option>
+											<option value="480">480p</option>
+										</select>
+									</div>
+									<div>
+										<label htmlFor="bitrate-select" className={labelCls}>
+											Audio bitrate
+										</label>
+										<select
+											id="bitrate-select"
+											className={selectCls}
+											value={bitrate}
+											onChange={(e) => setBitrate(Number(e.target.value))}
+											disabled={isConverting}
+										>
+											<option value={128}>128 kbps</option>
+											<option value={192}>192 kbps</option>
+											<option value={256}>256 kbps</option>
+										</select>
+									</div>
+								</div>
+							)}
+						</section>
+					</Collapse>
 
-					<div className="flex gap-3">
+					<div className="flex flex-wrap gap-2">
 						<button
 							type="button"
 							onClick={handleConvertAll}
-							className="flex-1 bg-blue-600 text-white px-4 py-2 rounded-lg font-medium hover:bg-blue-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+							className={cx(btn.base, btn.primary)}
 							disabled={isConverting || jobs.length === 0}
 						>
+							{isConverting && <Spinner />}
 							{jobs.length > 1 ? "Convert all" : "Convert"}
 						</button>
 						{doneCount >= 2 && (
@@ -508,7 +559,7 @@ export default function App() {
 								type="button"
 								onClick={handleZip}
 								disabled={isConverting}
-								className="px-4 py-2 bg-blue-600 text-white rounded-lg font-medium hover:bg-blue-700 transition-colors disabled:opacity-50"
+								className={cx(btn.base, btn.ghost)}
 							>
 								Download ZIP
 							</button>
@@ -516,25 +567,80 @@ export default function App() {
 						<button
 							type="button"
 							onClick={handleReset}
-							className="px-4 py-2 border border-gray-600 rounded-lg hover:bg-gray-700 transition-colors"
+							className={cx(btn.base, btn.ghost)}
 							disabled={isConverting}
 						>
 							Reset
 						</button>
+						<span className="ml-auto hidden items-center gap-1.5 self-center text-[12px] text-mute sm:flex">
+							<Kbd>Ctrl O</Kbd> browse <Kbd>Enter</Kbd> convert
+						</span>
 					</div>
+				</StaggerItem>
 
-					{status !== "Idle" && (
-						<div className="text-sm text-gray-300 bg-gray-700/50 p-3 rounded">
-							<span className="font-medium">Status:</span> {status}
-							{isConverting && ffmpegProgress > 0 && (
-								<span> {Math.round(ffmpegProgress * 100)}%</span>
-							)}
+				<StaggerItem className="space-y-4">
+					<section className={`${panel} p-5`}>
+						<div className="flex items-center gap-2">
+							<SectionLabel>Status</SectionLabel>
+							<Chip
+								tone={
+									isConverting
+										? "accent"
+										: failedCount > 0
+											? "bad"
+											: doneCount > 0
+												? "ok"
+												: "neutral"
+								}
+								className="ml-auto"
+							>
+								<Dot
+									tone={
+										isConverting
+											? "accent"
+											: failedCount > 0
+												? "bad"
+												: doneCount > 0
+													? "ok"
+													: "neutral"
+									}
+									live={isConverting}
+								/>
+								{status}
+							</Chip>
 						</div>
-					)}
+						<div className="mt-4 grid grid-cols-3 gap-4">
+							<Stat label="Files" value={jobs.length.toLocaleString("en-US")} />
+							<Stat
+								label="Done"
+								value={doneCount.toLocaleString("en-US")}
+								tone={doneCount > 0 ? "ok" : undefined}
+							/>
+							<Stat
+								label="Failed"
+								value={failedCount.toLocaleString("en-US")}
+								tone={failedCount > 0 ? "bad" : undefined}
+							/>
+						</div>
+						<div className="mt-4 flex items-center justify-between border-t border-line pt-3 text-[12px]">
+							<span className="text-mute">Input size</span>
+							<span className="font-mono text-dim">
+								{jobs.length ? humanBytes(totalBytes) : "–"}
+							</span>
+						</div>
+						{isConverting && ffmpegProgress > 0 && (
+							<div className="mt-3">
+								<div className="mb-1.5 flex justify-between text-[12px]">
+									<span className="text-mute">Current file</span>
+									<span className="font-mono text-ink">{Math.round(ffmpegProgress * 100)}%</span>
+								</div>
+								<Bar value={ffmpegProgress} />
+							</div>
+						)}
+					</section>
 
 					<ResultCard result={result} copied={copied} onCopy={handleCopy} />
 
-					{/* Logs and FFmpeg console */}
 					{isMedia && (
 						<LogsPanel
 							logs={ffmpegLogs}
@@ -543,11 +649,22 @@ export default function App() {
 						/>
 					)}
 
-					<div className="text-xs text-gray-500 border-t border-gray-700 pt-4">
-						🔒 Files never leave your browser. Conversion runs in a Web Worker for instant results.
-					</div>
-				</div>
-			</div>
-		</div>
+					<p className="flex gap-2 px-1 text-[12px] leading-relaxed text-mute">
+						<svg
+							viewBox="0 0 20 20"
+							className="mt-0.5 h-3.5 w-3.5 flex-none"
+							fill="none"
+							stroke="currentColor"
+							strokeWidth="1.6"
+							aria-hidden
+						>
+							<rect x="4" y="9" width="12" height="8" rx="1.5" />
+							<path d="M7 9V6.5a3 3 0 0 1 6 0V9" />
+						</svg>
+						Files never leave your browser. Conversion runs in a Web Worker.
+					</p>
+				</StaggerItem>
+			</Stagger>
+		</Shell>
 	);
 }

@@ -1,54 +1,61 @@
+import { AnimatePresence, motion, rise } from "../ez/motion";
+import { btn, cx, panel, SectionLabel } from "../ez/ui";
 import { humanBytes, sizeNote } from "../format";
 
 export default function ResultCard({ result, copied, onCopy }) {
-	if (!result) return null;
 	return (
-		<div className="bg-gray-700 border border-gray-600 rounded-lg p-4">
-			<div className="flex items-center gap-3">
-				{result.isImage && (
-					<img
-						src={result.url}
-						alt={result.name}
-						className="w-14 h-14 rounded border border-gray-600 object-cover"
-					/>
-				)}
-				<div className="min-w-0 flex-1">
-					<p className="text-sm font-medium text-gray-200 truncate">{result.name}</p>
-					<p className="text-xs text-gray-400">
-						{humanBytes(result.fromSize)} → {humanBytes(result.toSize)} (
-						{sizeNote(result.fromSize, result.toSize)})
-						{result.warnings.length > 0 && ` · ${result.warnings.join("; ")}`}
-					</p>
-				</div>
-			</div>
-			<div className="mt-3 flex flex-wrap gap-2">
-				<a
-					href={result.url}
-					download={result.name}
-					className="px-3 py-1.5 text-xs bg-blue-600 text-white rounded hover:bg-blue-700"
+		<AnimatePresence mode="wait">
+			{result && (
+				<motion.section
+					key={result.url}
+					className={cx(panel, "p-5")}
+					initial={{ opacity: 0, y: 12 }}
+					animate={{ opacity: 1, y: 0 }}
+					exit={{ opacity: 0 }}
+					transition={rise}
 				>
-					Download
-				</a>
-				{result.isImage && (
-					<a
-						href={result.url}
-						target="_blank"
-						rel="noreferrer"
-						className="px-3 py-1.5 text-xs border border-gray-600 rounded hover:bg-gray-600"
-					>
-						Open
-					</a>
-				)}
-				{result.isText && (
-					<button
-						type="button"
-						onClick={onCopy}
-						className="px-3 py-1.5 text-xs border border-gray-600 rounded hover:bg-gray-600"
-					>
-						{copied ? "Copied!" : "Copy"}
-					</button>
-				)}
-			</div>
-		</div>
+					<SectionLabel>Last result</SectionLabel>
+					<div className="mt-3 flex items-center gap-3">
+						{result.isImage && (
+							<img
+								src={result.url}
+								alt={result.name}
+								className="h-14 w-14 rounded border border-line object-cover"
+							/>
+						)}
+						<div className="min-w-0 flex-1">
+							<p className="truncate text-[13px] font-medium text-ink">{result.name}</p>
+							<p className="mt-0.5 font-mono text-[12px] text-mute">
+								{humanBytes(result.fromSize)} → {humanBytes(result.toSize)} (
+								{sizeNote(result.fromSize, result.toSize)})
+							</p>
+							{result.warnings.length > 0 && (
+								<p className="mt-0.5 text-[12px] text-warn">{result.warnings.join("; ")}</p>
+							)}
+						</div>
+					</div>
+					<div className="mt-4 flex flex-wrap gap-2">
+						<a href={result.url} download={result.name} className={cx(btn.sm, btn.ghost)}>
+							Download
+						</a>
+						{result.isImage && (
+							<a
+								href={result.url}
+								target="_blank"
+								rel="noreferrer"
+								className={cx(btn.sm, btn.ghost)}
+							>
+								Open
+							</a>
+						)}
+						{result.isText && (
+							<button type="button" onClick={onCopy} className={cx(btn.sm, btn.ghost)}>
+								{copied ? "Copied" : "Copy"}
+							</button>
+						)}
+					</div>
+				</motion.section>
+			)}
+		</AnimatePresence>
 	);
 }

@@ -1,13 +1,30 @@
 <!doctype html>
-<html lang="en">
+<html lang="en" class="dark">
   <head>
     <meta charset="UTF-8" />
     <link rel="icon" type="image/png" href="/icons/icon-192.png" />
     <link rel="apple-touch-icon" href="/icons/icon-192.png" />
     <link rel="manifest" href="/manifest.webmanifest" />
-    <meta name="theme-color" content="#1f2937" />
+    <meta name="theme-color" content="#171719" />
+    <script>
+      // ez theme bootstrap: inline and non-module so it runs before first
+      // paint. One rule — a stored choice wins, otherwise DARK.
+      (() => {
+        const r = document.documentElement;
+        const m = document.querySelector('meta[name="theme-color"]');
+        let t = 'dark';
+        try {
+          if (localStorage.getItem('ez.theme') === 'light') t = 'light';
+        } catch {
+          /* storage blocked: class="dark" is already on <html> */
+        }
+        r.classList.toggle('dark', t === 'dark');
+        r.classList.toggle('light', t === 'light');
+        if (m) m.setAttribute('content', t === 'dark' ? '#171719' : '#f9fafb');
+      })();
+    </script>
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>EZCONV</title>
+    <title>ezconv</title>
   </head>
   <body>
     <div id="root"></div>
