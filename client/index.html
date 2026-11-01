@@ -9,15 +9,18 @@
     <script>
       // ez theme bootstrap: inline and non-module so it runs before first
       // paint. One rule — a stored choice wins, otherwise DARK.
-      (function () {
+      (() => {
+        const r = document.documentElement;
+        const m = document.querySelector('meta[name="theme-color"]');
+        let t = 'dark';
         try {
-          var t = localStorage.getItem('ez.theme') === 'light' ? 'light' : 'dark';
-          var r = document.documentElement;
-          r.classList.toggle('dark', t === 'dark');
-          r.classList.toggle('light', t === 'light');
-          var m = document.querySelector('meta[name="theme-color"]');
-          if (m) m.setAttribute('content', t === 'dark' ? '#171719' : '#f9fafb');
-        } catch (e) { /* class="dark" is already on <html> */ }
+          if (localStorage.getItem('ez.theme') === 'light') t = 'light';
+        } catch {
+          /* storage blocked: class="dark" is already on <html> */
+        }
+        r.classList.toggle('dark', t === 'dark');
+        r.classList.toggle('light', t === 'light');
+        if (m) m.setAttribute('content', t === 'dark' ? '#171719' : '#f9fafb');
       })();
     </script>
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
