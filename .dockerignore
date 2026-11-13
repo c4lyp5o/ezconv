@@ -11,3 +11,5 @@ docker-compose.yml
 .env.*
 coverage
 client/coverage
+
+release

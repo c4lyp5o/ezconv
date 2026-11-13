@@ -2,7 +2,10 @@
 
 [![CI](https://github.com/c4lyp5o/ezconv/actions/workflows/ci.yml/badge.svg)](https://github.com/c4lyp5o/ezconv/actions/workflows/ci.yml)
 
-A modern, client-side file conversion tool that runs entirely in your browser. No uploads, no accounts, just instant conversions.
+A modern, client-side file conversion tool that runs entirely in your browser. No uploads, no accounts, local conversion and compression.
+
+**2.0.0 release preparation:** this is a frontend-only deployment. See the
+[release and migration guide](RELEASE.md) for the changes from 1.x.
 
 ## 🚀 Features
 
@@ -78,7 +81,7 @@ loaded only when needed, with rendering, fonts and decoding assets served locall
 
 ### Prerequisites
 
-You need to have Bun installed on your system.
+Use Bun 1.4.4, matching CI and the container builder.
 
 ### Install and develop
 
@@ -104,7 +107,7 @@ Netlify, or another static file service). For a repository-connected host, use
 No JavaScript runtime or backend process is needed in production.
 
 Serve JavaScript modules (`.js` and `.mjs`) with a JavaScript MIME type and `.wasm`
-with `application/wasm`. Use HTTPS for PWA/clipboard features; localhost is also
+with `application/wasm`. Use HTTPS for the app and PWA/clipboard features; localhost is also
 supported. Serve at the domain root, since asset and service worker paths are
 root-relative. Missing assets should return 404. Use long immutable caching for
 hashed `/assets/` files and revalidate HTML, `sw.js`, and `/pdf/` support files.
@@ -123,7 +126,8 @@ docker run --rm -p 5000:5000 ezconv
 Compose supports `EZCONV_PORT` for the published port. Former backend `HOST`,
 `PORT`, and `TZ` variables are no longer used by the image.
 
-For LAN development, use `bun run dev --host 0.0.0.0`.
+For LAN development, use `bun run dev --host 0.0.0.0` behind HTTPS when opening
+from another device; the localhost secure-context exception does not cover LAN IPs.
 
 **PWA / offline**: the shell and fetched assets are cached by the service worker.
 Open the app and use each desired conversion/compression type online first;
@@ -159,4 +163,5 @@ branches publish `:latest` plus their branch tag; development publishes
 ## 📚 Docs
 
 - [CHANGELOG.md](CHANGELOG.md) — release history
-- [DEVELOPER.md](DEVELOPER.md) — architecture, worker protocol, build and deployment
+- [DEVELOPER.md](DEVELOPER.md) — architecture, job protocol, build and deployment
+- [RELEASE.md](RELEASE.md) — release preparation, 1.x migration, verification and rollback

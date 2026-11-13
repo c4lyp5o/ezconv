@@ -38,6 +38,9 @@ jobs:
         working-directory: client
         run: bun install --frozen-lockfile
 
+      - name: 🏷️ Validate release metadata
+        run: bun run release:validate
+
       - name: 🧹 Lint (Biome)
         run: bun run lint
 
@@ -48,6 +51,16 @@ jobs:
       - name: 🌐 Client build (vite)
         working-directory: client
         run: bun run build
+
+      - name: 📦 Prepare versioned release files
+        run: bun scripts/release.mjs --package-only
+
+      - name: 📦 Versioned release artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: ezconv-release
+          path: release/*/*
+          if-no-files-found: error
 
       - name: 📦 Static frontend artifact
         uses: actions/upload-artifact@v4

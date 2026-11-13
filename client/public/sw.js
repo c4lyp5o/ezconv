@@ -1,6 +1,6 @@
 // ezconv service worker: the app is fully client-side, so once the shell and
 // assets are cached it keeps converting offline (the ffmpeg core is local too)
-const CACHE = "ezconv-v1";
+const CACHE = "ezconv-v2.0.0";
 
 self.addEventListener("install", () => {
 	self.skipWaiting();
