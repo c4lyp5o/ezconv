@@ -136,3 +136,23 @@ incompatible asset layout.
 The Docker image is two-stage `oven/bun:1.3-alpine`: frozen-lockfile install of
 the root workspace (server deps), client build, then a runtime stage that serves
 as non-root `bun`.
+
+## Compression
+
+`compression.js` owns presets, bounded image encoding attempts and size-target
+warnings. The worker accepts `target: "compress"` and
+`compressionOptions: { mode: "best-effort" | "balanced" | "best-compression" | "percentage", reduction: 50 }`.
+Picture compression keeps JPEG/PNG/WebP formats and uses PNG for other inputs.
+Results never exceed the original size when the format is unchanged.
+
+PDFs are handled by lazy-loaded `pdf-compression.js` in the browser, using the
+same job IDs, progress and result messages as worker jobs. PDF.js parsing runs in
+its own worker; page rendering uses DOM canvas/font APIs and yields between pages.
+Best effort rewrites with pdf-lib object streams. Other modes can rasterize pages
+at bounded DPI and JPEG quality; only the smallest output is retained. Percentage
+mode stops at the first candidate meeting its target and reports missed targets.
+Vite emits PDF.js cmaps, fonts and wasm under `/pdf/`, with no CDN dependencies.
+PDF rasterization removes document semantics and is explicitly described in the UI.
+
+`media-files.js` checks FFmpeg exit codes and removes input/output files in a
+finally block. `archive.js` assigns unique ZIP entries, including suffix collisions.

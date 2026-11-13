@@ -65,7 +65,10 @@ export default function DropZone({
 					/>
 					<span className="border-b border-accent text-ink">browse</span>
 				</label>
-				<p className="text-[12px] text-mute">Data, images, audio and video</p>
+				<p className="text-[12px] text-mute">Data, images, PDFs, audio and video</p>
+				<p className="text-[12px] text-mute">
+					Choose Compress in an image’s format menu to reduce its size.
+				</p>
 			</div>
 		</div>
 	);

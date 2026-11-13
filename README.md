@@ -16,6 +16,27 @@ A modern, client-side file conversion tool that runs entirely in your browser. N
 -   **⌨️ Handy**: Paste files from the clipboard (`Ctrl+V`), `Enter` to convert, `Ctrl+O` to browse. The result card shows previews, before/after sizes, re-download and copy-to-clipboard.
 -   **🖥️ Modern UI**: Sleek, responsive, dark mode by default, respects `prefers-reduced-motion`.
 
+## Picture and PDF compression
+
+Add pictures or PDFs to the queue. Pictures offer **Compress** in the per-file
+format menu; PDFs default to compression. The Output panel offers:
+
+- **Best effort**: keeps image dimensions; rewrites PDF object streams while preserving text and document features.
+- **Balanced**: moderate quality and resolution reduction.
+- **Best compression**: stronger quality and resolution reduction for smaller files.
+- **Target percentage reduction**: choose 1–90% smaller (50% means half the original size). Tries progressively smaller settings and reports if the target cannot be reached.
+
+Compression runs locally. Already compact JPEG/PNG/WebP and PDF files are
+returned unchanged if the attempted compression would make them larger.
+PNG compression benefits mainly from reducing dimensions. GIF/BMP/SVG compression
+exports PNG; animated GIFs flatten to one frame.
+
+PDF presets other than Best effort can rebuild pages as JPEG images. This removes
+selectable text, links, forms, and accessibility tags; the UI warns before running
+and the result records when flattening occurred. Re-saving a PDF invalidates its
+digital signatures. Password-protected PDFs are not supported. PDF processing is
+loaded only when needed, with rendering, fonts and decoding assets served locally.
+
 ## 🛠️ Tech Stack
 
 -   **Frontend**: React
@@ -97,7 +118,7 @@ The Docker image sets `HOST=0.0.0.0` internally (the published port is the bound
 
 ```bash
 bun run lint                      # Biome over the whole repo
-cd client && bunx vitest run      # 29 tests, incl. real worker-dispatch harness
+cd client && bunx vitest run      # regression tests and real worker-dispatch harness
 ```
 
 GitHub Actions ([`.github/workflows/ci.yml`](.github/workflows/ci.yml)) runs the same gate on every push/PR, then builds and pushes the GHCR image (`:main`/`:latest` from main, `:development` from development — only when the gate is green).

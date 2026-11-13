@@ -1,5 +1,6 @@
-import { createArchive } from "./archive";
 import { useCallback, useEffect, useRef, useState } from "react";
+import { createArchive } from "./archive";
+import CompressionControls from "./components/CompressionControls";
 import DropZone from "./components/DropZone";
 import JobRow from "./components/JobRow";
 import LogsPanel from "./components/LogsPanel";
@@ -36,6 +37,7 @@ import { defaultTargetFor, getFileExtension, humanBytes, sizeNote } from "./form
 
 // File size limits per category (bytes)
 const SIZE_LIMITS = {
+	document: 30 * 1024 * 1024,
 	data: 10 * 1024 * 1024, // 10 MB
 	image: 15 * 1024 * 1024, // 15 MB
 	audio: 80 * 1024 * 1024, // 80 MB
@@ -61,6 +63,10 @@ export default function App() {
 	// media output controls ("720" preserves the old min(1280, iw) cap)
 	const [resolution, setResolution] = useState("720");
 	const [bitrate, setBitrate] = useState(192);
+	const [compressionOptions, setCompressionOptions] = useState({
+		mode: "best-effort",
+		reduction: 50,
+	});
 
 	// last successful conversion: kept alive for preview / re-download / copy
 	const [result, setResult] = useState(null);
@@ -151,6 +157,9 @@ export default function App() {
 				case "log":
 					setFfmpegLogs((s) => [...s.slice(-199), message]);
 					break;
+				case "compression-progress":
+					setJobs((prev) => prev.map((j) => (j.id === jobId ? { ...j, progress: ratio } : j)));
+					break;
 				case "ffmpeg-progress":
 					setFfmpegProgress(Number(ratio || 0));
 					setJobs((prev) =>
@@ -161,9 +170,13 @@ export default function App() {
 					runRef.current.done += 1;
 					const res = buildResult(filename, sizeMapRef.current[jobId] ?? 0, buffer, mime, warnings);
 					setJobs((prev) =>
-						prev.map((j) =>
-							j.id === jobId ? { ...j, status: "done", progress: 1, result: res } : j,
-						),
+						prev.map((j) => {
+							if (j.id !== jobId) return j;
+							if (j.result?.url && j.result.url !== resultUrlRef.current) {
+								URL.revokeObjectURL(j.result.url);
+							}
+							return { ...j, status: "done", progress: 1, result: res };
+						}),
 					);
 					// single-file runs keep the classic auto-download + size toast
 					if (runRef.current.autoDownload) {
@@ -290,7 +303,9 @@ export default function App() {
 	}
 
 	function setJobTarget(id, target) {
-		setJobs((prev) => prev.map((j) => (j.id === id ? { ...j, target } : j)));
+		setJobs((prev) =>
+			prev.map((j) => (j.id === id ? { ...j, target, status: "ready", error: null } : j)),
+		);
 	}
 
 	function removeJob(id) {
@@ -355,6 +370,30 @@ export default function App() {
 				if (job.category === "audio" || job.category === "video") {
 					messagePayload.mediaOptions = { resolution, bitrate };
 				}
+				if (job.target === "compress") messagePayload.compressionOptions = compressionOptions;
+				if (job.category === "document") {
+					const { compressPdf } = await import("./pdf-compression");
+					const compressed = await compressPdf(
+						await job.file.arrayBuffer(),
+						compressionOptions,
+						(ratio) => {
+							workerRef.current.onmessage({
+								data: { status: "compression-progress", jobId: job.id, ratio },
+							});
+						},
+					);
+					workerRef.current.onmessage({
+						data: {
+							status: "done",
+							jobId: job.id,
+							filename: `${job.file.name.replace(/\.[^.]+$/, "")}.compressed.pdf`,
+							buffer: compressed.outBuffer,
+							mime: compressed.mime,
+							warnings: compressed.warnings,
+						},
+					});
+					continue;
+				}
 				const isBinary =
 					job.ext === "xlsx" ||
 					job.ext === "xls" ||
@@ -410,7 +449,7 @@ export default function App() {
 		<Shell
 			brand={<Brand name="ezconv" glyph="cv" scope="Runs in your browser" />}
 			title="Convert"
-			sub="Images, audio, video and data files. Nothing is uploaded."
+			sub="Convert files. Compress pictures and PDFs. Nothing is uploaded."
 			width="max-w-[1120px]"
 		>
 			<div className="pointer-events-none fixed top-16 right-4 z-50 w-[min(380px,calc(100vw-2rem))]">
@@ -479,9 +518,17 @@ export default function App() {
 						</section>
 					)}
 
-					<Collapse open={showQuality || isMedia}>
+					<Collapse open={showQuality || isMedia || jobs.some((j) => j.target === "compress")}>
 						<section className={`${panel} space-y-4 p-5`}>
 							<SectionLabel>Output</SectionLabel>
+							{jobs.some((j) => j.target === "compress") && (
+								<CompressionControls
+									value={compressionOptions}
+									onChange={setCompressionOptions}
+									disabled={isConverting}
+									hasPdf={jobs.some((j) => j.category === "document")}
+								/>
+							)}
 							{showQuality && (
 								<div>
 									<label htmlFor="quality-range" className={labelCls}>
@@ -658,7 +705,7 @@ export default function App() {
 							<rect x="4" y="9" width="12" height="8" rx="1.5" />
 							<path d="M7 9V6.5a3 3 0 0 1 6 0V9" />
 						</svg>
-						Files never leave your browser. Conversion runs in a Web Worker.
+						Files never leave your browser. Conversion and compression run locally.
 					</p>
 				</StaggerItem>
 			</Stagger>

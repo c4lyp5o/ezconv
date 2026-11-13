@@ -20,6 +20,8 @@
 		"jszip": "^3.10.2",
 		"motion": "14.1.0",
 		"papaparse": "^5.4.1",
+		"pdf-lib": "^1.17.1",
+		"pdfjs-dist": "^6.5.438",
 		"react": "^19.2.0",
 		"react-dom": "^19.2.0",
 		"tailwindcss": "^4.1.17",

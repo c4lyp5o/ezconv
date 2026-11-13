@@ -2,6 +2,7 @@ export const IMAGE_EXTENSIONS = ["jpg", "jpeg", "png", "gif", "webp", "bmp", "sv
 export const AUDIO_EXTENSIONS = ["mp3", "wav", "aac", "flac", "ogg", "m4a"];
 export const VIDEO_EXTENSIONS = ["mp4", "avi", "mkv", "mov", "webm", "flv"];
 export const DATA_EXTENSIONS = ["json", "csv", "xlsx", "xls"];
+export const DOCUMENT_EXTENSIONS = ["pdf"];
 
 // Canvas can only ENCODE these — gif/bmp/svg targets would silently download
 // PNG bytes with the wrong extension, so they are inputs-only
@@ -28,9 +29,11 @@ export const ALL_EXTENSIONS = [
 	...AUDIO_EXTENSIONS,
 	...VIDEO_EXTENSIONS,
 	...DATA_EXTENSIONS,
+	...DOCUMENT_EXTENSIONS,
 ];
 
 export function getFileCategory(ext) {
+	if (DOCUMENT_EXTENSIONS.includes(ext)) return "document";
 	if (IMAGE_EXTENSIONS.includes(ext)) return "image";
 	if (AUDIO_EXTENSIONS.includes(ext)) return "audio";
 	if (VIDEO_EXTENSIONS.includes(ext)) return "video";

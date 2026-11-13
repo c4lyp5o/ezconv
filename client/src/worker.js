@@ -2,9 +2,10 @@ import wasmURL from "@ffmpeg/core/wasm?url";
 import coreURL from "@ffmpeg/core?url";
 import { FFmpeg } from "@ffmpeg/ffmpeg";
 import Papa from "papaparse";
-import { runMediaConversion } from "./media-files";
 import * as XLSX from "xlsx";
+import { compressImage } from "./compression";
 import { AUDIO_EXTENSIONS, IMAGE_EXTENSIONS, imageMimeFor, VIDEO_EXTENSIONS } from "./file-config";
+import { runMediaConversion } from "./media-files";
 
 const MEDIA_EXTENSIONS = [...AUDIO_EXTENSIONS, ...VIDEO_EXTENSIONS];
 
@@ -142,7 +143,6 @@ const convertMedia = async (arrayBuffer, fromExt, toExt, mediaOptions = {}) => {
 
 		post({ status: "log", message: `Writing ${inputName}` });
 
-
 		const args = buildMediaArgs({
 			inputName,
 			outputName,
@@ -177,15 +177,21 @@ const handleConvert = async ({
 	quality,
 	mediaOptions,
 	jobId,
+	compressionOptions,
 }) => {
 	currentJobId = jobId ?? null;
 	try {
-		const outName = `${filename.replace(/\.[^.]+$/, "")}.${target}`;
+		let outName = `${filename.replace(/\.[^.]+$/, "")}.${target}`;
 		const warnings = [];
 		let mime = "application/octet-stream";
 		let outBuffer;
 
-		if (ext === "json") {
+		if (target === "compress" && IMAGE_EXTENSIONS.includes(ext)) {
+			const result = await compressImage(arrayBuffer, ext, compressionOptions);
+			({ outBuffer, mime } = result);
+			warnings.push(...result.warnings);
+			outName = `${filename.replace(/\.[^.]+$/, "")}.compressed.${result.ext}`;
+		} else if (ext === "json") {
 			let json;
 			try {
 				const src = typeof text === "string" ? text : new TextDecoder().decode(arrayBuffer);

@@ -38,4 +38,3 @@ describe("media filesystem isolation", () => {
 		expect(ff.files.size).toBe(0);
 	});
 });
-

@@ -32,6 +32,7 @@ export function sizeNote(from, to) {
 export function targetOptionsFor(ext) {
 	if (!ext) return [];
 	const category = getFileCategory(ext);
+	if (category === "document") return ["compress"];
 	if (category === "data") {
 		// For data, it never makes sense to convert to the same type
 		return DATA_EXTENSIONS.filter((e) => e !== ext && e !== "xls"); // xls is not produced
@@ -41,7 +42,7 @@ export function targetOptionsFor(ext) {
 		// silently download PNG bytes with the wrong name, so not offered.
 		// jpg and jpeg are one format: converting between them is just a rename.
 		const sameFormat = ext === "jpg" || ext === "jpeg" ? ["jpg", "jpeg"] : [ext];
-		return CANVAS_OUTPUT_EXTENSIONS.filter((e) => !sameFormat.includes(e));
+		return ["compress", ...CANVAS_OUTPUT_EXTENSIONS.filter((e) => !sameFormat.includes(e))];
 	}
 	if (category === "audio") {
 		// For audio/video, allow same-extension to allow for remuxing/repair
@@ -54,6 +55,7 @@ export function targetOptionsFor(ext) {
 }
 
 export function defaultTargetFor(ext, category) {
+	if (category === "document") return "compress";
 	if (category === "data") {
 		if (ext === "json") return "csv";
 		if (ext === "csv") return "json";

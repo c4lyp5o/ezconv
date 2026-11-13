@@ -36,7 +36,7 @@ export default function JobRow({ job, disabled, onTarget, onRemove }) {
 				>
 					{options.map((o) => (
 						<option key={o} value={o}>
-							{o.toUpperCase()}
+							{o === "compress" ? "Compress" : o.toUpperCase()}
 						</option>
 					))}
 				</select>
@@ -83,6 +83,14 @@ export default function JobRow({ job, disabled, onTarget, onRemove }) {
 						</span>
 						{r.warnings?.length > 0 && <span className="text-warn">{r.warnings.join("; ")}</span>}
 						<span className="ml-auto flex gap-2">
+							<button
+								type="button"
+								disabled={disabled}
+								onClick={() => onTarget(job.id, job.target)}
+								className={cx(btn.sm, btn.ghost)}
+							>
+								Run again
+							</button>
 							<a href={r.url} download={r.name} className={cx(btn.sm, btn.ghost)}>
 								Download
 							</a>
