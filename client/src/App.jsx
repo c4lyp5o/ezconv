@@ -1,4 +1,4 @@
-import JSZip from "jszip";
+import { createArchive } from "./archive";
 import { useCallback, useEffect, useRef, useState } from "react";
 import DropZone from "./components/DropZone";
 import JobRow from "./components/JobRow";
@@ -385,10 +385,7 @@ export default function App() {
 	async function handleZip() {
 		const done = jobs.filter((j) => j.status === "done" && j.result?.blob);
 		if (done.length === 0) return;
-		const zip = new JSZip();
-		for (const j of done) {
-			zip.file(j.result.name, j.result.blob);
-		}
+		const zip = createArchive(done.map((j) => j.result));
 		const zipBlob = await zip.generateAsync({ type: "blob", compression: "STORE" });
 		const url = URL.createObjectURL(zipBlob);
 		const a = document.createElement("a");
