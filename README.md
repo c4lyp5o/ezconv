@@ -126,8 +126,9 @@ docker run --rm -p 5000:5000 ezconv
 Compose supports `EZCONV_PORT` for the published port. Former backend `HOST`,
 `PORT`, and `TZ` variables are no longer used by the image.
 
-For LAN development, use `bun run dev --host 0.0.0.0` behind HTTPS when opening
-from another device; the localhost secure-context exception does not cover LAN IPs.
+For LAN development, use `bun run dev --host 0.0.0.0`. File conversion works on
+HTTP LAN addresses; PWA installation and clipboard features still need HTTPS
+(the localhost secure-context exception does not cover LAN IPs).
 
 **PWA / offline**: the shell and fetched assets are cached by the service worker.
 Open the app and use each desired conversion/compression type online first;

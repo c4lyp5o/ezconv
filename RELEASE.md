@@ -86,7 +86,8 @@ the unit suite alone does not verify every encoder or browser.
 ## Hosting requirements
 
 Serve the entire output at `/`, using HTTPS (localhost is also a secure context
-for development). `.js` and `.mjs` need JavaScript MIME types; `.wasm` needs
+for development). Basic conversion also works on HTTP LAN addresses using local
+job-ID fallbacks; PWA/clipboard features still need a secure context. `.js` and `.mjs` need JavaScript MIME types; `.wasm` needs
 `application/wasm`. Missing assets must return 404 rather than HTML.
 
 Use immutable caching only for hashed `/assets/` paths. Revalidate HTML, `sw.js`,

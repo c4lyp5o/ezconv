@@ -39,6 +39,7 @@ All notable changes to ezconv are documented here. Versions follow Semantic Vers
 
 ### Fixed
 
+- Queue IDs fall back when `crypto.randomUUID` is unavailable on HTTP LAN origins; file additions and PDF/image combining still work.
 - CSV-to-XLSX now uses supported APIs and preserves identifiers/large integer strings.
 - FFmpeg exit codes are checked; temporary files are removed so failed jobs
   cannot return a previous result. Audio extraction maps only the audio stream.

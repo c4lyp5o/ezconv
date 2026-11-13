@@ -42,6 +42,7 @@ import {
 	sizeNote,
 	targetOptionsFor,
 } from "./format";
+import { createJobId } from "./job-id";
 
 // File size limits per category (bytes)
 const SIZE_LIMITS = {
@@ -296,7 +297,7 @@ export default function App() {
 				continue;
 			}
 			accepted.push({
-				id: crypto.randomUUID(),
+				id: createJobId(),
 				file: f,
 				ext: newExt,
 				category,
@@ -382,7 +383,7 @@ export default function App() {
 			.map((job) => job.file);
 		if (files.length < 2) return;
 		const job = {
-			id: crypto.randomUUID(),
+			id: createJobId(),
 			file: {
 				name: category === "image" ? "combined-images.pdf" : "merged.pdf",
 				size: files.reduce((n, f) => n + f.size, 0),
