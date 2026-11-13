@@ -1,43 +1,49 @@
-// ezconv service worker: the app is fully client-side, so once the shell and
-// assets are cached it keeps converting offline (the ffmpeg core is local too)
+// Same-origin static assets only. Cache writes must never block conversion or
+// persist a temporary server error as an immutable asset.
 const CACHE = "ezconv-v2.0.0";
 
 self.addEventListener("install", () => {
 	self.skipWaiting();
 });
 
-self.addEventListener("activate", (e) => {
-	e.waitUntil(self.clients.claim());
+self.addEventListener("activate", (event) => {
+	event.waitUntil(self.clients.claim());
 });
 
-self.addEventListener("fetch", (e) => {
-	const url = new URL(e.request.url);
-	if (e.request.method !== "GET" || url.origin !== location.origin) return;
+self.addEventListener("fetch", (event) => {
+	const { request } = event;
+	const url = new URL(request.url);
+	if (request.method !== "GET" || url.origin !== location.origin) return;
 
-	// hashed assets (including the 32 MB wasm core) are immutable: cache-first
-	if (url.pathname.startsWith("/assets/")) {
-		e.respondWith(
-			caches.match(e.request).then(
-				(hit) =>
-					hit ||
-					fetch(e.request).then((res) => {
-						const copy = res.clone();
-						caches.open(CACHE).then((c) => c.put(e.request, copy));
-						return res;
-					}),
-			),
-		);
-		return;
-	}
+	let cacheWrite = Promise.resolve();
+	const fromNetwork = async () => {
+		const response = await fetch(request);
+		// Partial/range responses cannot be stored by Cache.put either.
+		if (response.ok && response.status === 200) {
+			const copy = response.clone();
+			cacheWrite = caches
+				.open(CACHE)
+				.then((cache) => cache.put(request, copy))
+				.catch(() => {});
+		}
+		return response;
+	};
+	const fromCache = async () => {
+		try {
+			const current = await (await caches.open(CACHE)).match(request);
+			if (current?.ok) return current;
+			// Older caches support still-open tabs, but never reuse cached errors.
+			const previous = await caches.match(request);
+			return previous?.ok ? previous : null;
+		} catch {
+			return null;
+		}
+	};
+	const response = url.pathname.startsWith("/assets/")
+		? fromCache().then((hit) => hit || fromNetwork())
+		: fromNetwork().catch(async () => (await fromCache()) || Response.error());
 
-	// navigations and the manifest: network-first with offline fallback
-	e.respondWith(
-		fetch(e.request)
-			.then((res) => {
-				const copy = res.clone();
-				caches.open(CACHE).then((c) => c.put(e.request, copy));
-				return res;
-			})
-			.catch(() => caches.match(e.request)),
-	);
+	event.respondWith(response);
+	// Register synchronously, and keep any background cache write alive.
+	event.waitUntil(response.then(() => cacheWrite).catch(() => {}));
 });
