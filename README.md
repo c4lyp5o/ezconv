@@ -51,61 +51,54 @@ loaded only when needed, with rendering, fonts and decoding assets served locall
 
 You need to have Bun installed on your system.
 
-### Installation
-
-1.  Clone the repository:
-
-    ```bash
-    git clone https://github.com/c4lyp5o/ezconv.git
-    cd ezconv
-    ```
-2.  Install server and client dependencies:
-
-    ```bash
-    bun run install:all
-    ```
-
-### Running the Development Server
-
-To start the local development server (client on `:3000`, API on `:5000`), run:
+### Install and develop
 
 ```bash
-bun dev
+bun run install:all
+bun run dev                 # Vite at http://localhost:3000
 ```
 
-### Production
+Bun is the only package manager used by this repo. There is no API server,
+backend install, database, or runtime `.env` configuration.
+
+### Build and deploy
 
 ```bash
-bun run build:all
-bun start
+bun run build               # creates dist/ at the repository root
+bun run preview             # local build preview only
 ```
 
-## 🐳 Docker
+Deploy **the contents of `dist/`** to a static host (Nginx, Cloudflare Pages,
+Netlify, or another static file service). For a repository-connected host, use
+`bun run install:all` for installation, `bun run build` for the build command, and
+`dist` as the output directory. CI also uploads an `ezconv-dist` artifact.
+No JavaScript runtime or backend process is needed in production.
 
-Builds and runs with no `.env` needed — the image is reproducible from the lockfile and runs as a non-root user:
+Serve JavaScript modules (`.js` and `.mjs`) with a JavaScript MIME type and `.wasm`
+with `application/wasm`. Use HTTPS for PWA/clipboard features; localhost is also
+supported. Serve at the domain root, since asset and service worker paths are
+root-relative. Missing assets should return 404. Use long immutable caching for
+hashed `/assets/` files and revalidate HTML, `sw.js`, and `/pdf/` support files.
+
+### Optional Docker static host
+
+The image builds with Bun and ships only the static frontend in unprivileged
+Nginx. It preserves port 5000 for existing reverse-proxy/container deployments:
 
 ```bash
 docker build -t ezconv .
-docker run -p 5000:5000 ezconv
+docker run --rm -p 5000:5000 ezconv
+# Or: docker compose up -d --build
 ```
 
-Or with Compose (portable dev file — `compose.yml`):
+Compose supports `EZCONV_PORT` for the published port. Former backend `HOST`,
+`PORT`, and `TZ` variables are no longer used by the image.
 
-```bash
-docker compose up -d        # GHCR image; `--build` to build the working tree
-```
+For LAN development, use `bun run dev --host 0.0.0.0`.
 
-## 🌐 Serving & LAN
-
-The static server binds **loopback by default**. Serve it to your LAN (e.g. test-drive from a phone) with the `HOST` env var; the port comes from `PORT`:
-
-```bash
-HOST=0.0.0.0 PORT=5000 bun start
-```
-
-The Docker image sets `HOST=0.0.0.0` internally (the published port is the boundary there).
-
-**PWA / offline**: the app is installable (`manifest.webmanifest`, service worker). Assets including the FFmpeg core are cached cache-first after first use — conversions then work fully offline.
+**PWA / offline**: the shell and fetched assets are cached by the service worker.
+Open the app and use each desired conversion/compression type online first;
+FFmpeg and PDF assets are loaded on demand, then available offline.
 
 ## 🔄 Supported Conversions
 
@@ -117,13 +110,18 @@ The Docker image sets `HOST=0.0.0.0` internally (the published port is the bound
 ## 🧪 Tests & CI
 
 ```bash
-bun run lint                      # Biome over the whole repo
-cd client && bunx vitest run      # regression tests and real worker-dispatch harness
+bun run lint
+bun run test
+bun run build
 ```
 
-GitHub Actions ([`.github/workflows/ci.yml`](.github/workflows/ci.yml)) runs the same gate on every push/PR, then builds and pushes the GHCR image (`:main`/`:latest` from main, `:development` from development — only when the gate is green).
+GitHub Actions ([CI](.github/workflows/ci.yml)) runs the same gate on pushes and
+PRs for `main`, `master`, and `development`. It uploads the static `dist/`
+artifact and publishes an optional GHCR static-host image on pushes. Production
+branches publish `:latest` plus their branch tag; development publishes
+`:development`.
 
 ## 📚 Docs
 
--   [CHANGELOG.md](CHANGELOG.md) — release history
--   [DEVELOPER.md](DEVELOPER.md) — architecture, worker protocol, build chain
+- [CHANGELOG.md](CHANGELOG.md) — release history
+- [DEVELOPER.md](DEVELOPER.md) — architecture, worker protocol, build and deployment

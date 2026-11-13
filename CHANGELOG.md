@@ -1,5 +1,13 @@
 # Changelog
 
+## Unreleased
+
+- Fix CSV-to-XLSX conversion, FFmpeg exit handling/file cleanup, and ZIP name collisions.
+- Add local picture/PDF compression presets and percentage size targets.
+- Update dependencies, migrate to Vite 8/Vitest 5, and use the official SheetJS 0.20.3 release.
+- Remove the unused Bun static server and backend scripts/dependencies.
+- Ship a static frontend artifact and optional unprivileged Nginx image; use Bun throughout.
+
 All notable changes to ezconv are documented here. The format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and the project uses
 [Semantic Versioning](https://semver.org/spec/v2.0.0.html).

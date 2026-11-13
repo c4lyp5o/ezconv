@@ -1,24 +1,13 @@
-# One workflow, both branches (ala ezhrm).
-#
-#   test    the gate — Biome, the client suite (vitest, incl. the real worker
-#           dispatch harness) and the vite build. Runs on pushes to master and
-#           development, on PRs, and on demand.
-#   image   GHCR build, only on push, only if `test` passed. The tags say
-#           which branch produced the image, so master and development can never
-#           be confused:
-#             main         -> :main, :latest, :sha-<12>
-#             development  -> :development, :sha-<12>   (never :latest)
-#             vX.Y.Z tag   -> :<tag>, :sha-<12>
-#
-# Secrets used: NTFY_URL (optional, notify is skipped if unset).
+# Validate the frontend, publish a static artifact, and optionally package it
+# as a static Nginx image. No application backend is built or deployed.
 name: CI
 
 on:
   push:
-    branches: [master, development]
+    branches: [main, master, development]
     tags: ["v*"]
   pull_request:
-    branches: [master, development]
+    branches: [main, master, development]
   workflow_dispatch:
 
 concurrency:
@@ -42,7 +31,7 @@ jobs:
           # Pinned to the dev box's runtime — CI and dev share a Bun.
           bun-version: "1.4.4"
 
-      - name: 📦 Install server deps (lockfile)
+      - name: 📦 Install repository tooling (lockfile)
         run: bun install --frozen-lockfile
 
       - name: 📦 Install client deps (lockfile)
@@ -54,11 +43,18 @@ jobs:
 
       - name: 🧪 Client suite (vitest)
         working-directory: client
-        run: bunx vitest run
+        run: bun run test --run
 
       - name: 🌐 Client build (vite)
         working-directory: client
         run: bun run build
+
+      - name: 📦 Static frontend artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: ezconv-dist
+          path: dist/
+          if-no-files-found: error
 
   image:
     name: Build & push GHCR image
@@ -86,6 +82,7 @@ jobs:
             echo "tags<<EOF"
             echo "${img}:sha-${sha}"
             case "${GITHUB_REF}" in
+              refs/heads/main)        echo "${img}:main"; echo "${img}:latest" ;;
               refs/heads/master)      echo "${img}:master"; echo "${img}:latest" ;;
               refs/heads/development) echo "${img}:development" ;;
               refs/tags/*)            echo "${img}:${GITHUB_REF_NAME}" ;;
@@ -115,7 +112,7 @@ jobs:
           tags: ${{ steps.meta.outputs.tags }}
           labels: |
             org.opencontainers.image.title=ezconv
-            org.opencontainers.image.description=Private, client-side file converter — images, audio, video, data
+            org.opencontainers.image.description=Private frontend-only file converter and compressor
             org.opencontainers.image.source=${{ github.server_url }}/${{ github.repository }}
             org.opencontainers.image.revision=${{ github.sha }}
             org.opencontainers.image.version=${{ github.ref_name }}

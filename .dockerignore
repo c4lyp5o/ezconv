@@ -7,3 +7,7 @@ dist
 *.log
 Dockerfile
 docker-compose.yml
+.env
+.env.*
+coverage
+client/coverage

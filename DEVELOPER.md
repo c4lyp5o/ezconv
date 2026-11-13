@@ -1,12 +1,11 @@
 # Developer Guide
 
-How ezconv is put together. Everything runs client-side: the Bun server only
-serves static files. Files never leave the browser.
+How ezconv is put together. Everything runs client-side: the production output is static files with no application backend. Files never leave the browser.
 
 ## Architecture
 
 ```
-Browser ── fetch ──> Bun static server (server.js, streams dist/)
+Browser ── fetch ──> Static host (serves dist/)
    │
    ├── React UI (client/src/App.jsx)  ── postMessage ──> Web Worker (client/src/worker.js)
    │        │                                                │
@@ -90,7 +89,7 @@ cap), bitrate `192k`.
 ## Build & tooling
 
 - **Bun** everywhere (package manager + the static server runtime).
-- **Vite** (rolldown-vite) builds `client/`; the ffmpeg core ships as hashed
+- **Vite 8** (Rolldown) builds `client/`; the ffmpeg core ships as hashed
   `?url` assets from `@ffmpeg/core` — no CDN, offline-safe.
 - **Biome** (root `biome.json`) is the only linter/formatter: tabs, width 100,
   double quotes, semicolons. `bun run lint` / `bun run lint:fix`.
@@ -99,21 +98,28 @@ cap), bitrate `192k`.
   (drives the **real** `self.onmessage` via a `postMessage` shim + `buildMediaArgs` unit tests).
 
 ```bash
-bun run install:all     # root + client
-bun run lint            # biome
-cd client && bunx vitest run && bun run build
+bun run install:all     # repo tooling + frontend dependencies
+bun run lint
+bun run test
+bun run build
 ```
 
-## Server & env
+## Static deployment
 
-`server.js` (Bun `serve`) streams `client/dist/`:
+There is no application backend. The former `server.js` only read files from
+`dist/`; the frontend never called an API. All conversions remain on the device.
 
-- `PORT` — default `5000`
-- `HOST` — default `127.0.0.1` (loopback); `0.0.0.0` to serve the LAN. The
-  Dockerfile sets `HOST=0.0.0.0` (the published port is the container boundary).
+`bun run dev` starts Vite on port 3000. `bun run build` emits the complete site
+into the root `dist/`. `bun run preview` previews this output locally and is not
+a production server. Deploy `dist/` directly on a static host at the domain root.
+No runtime Bun/Node process, `.env`, database, or API configuration is required.
 
-Hashed `/assets/` responses are `immutable, max-age=31536000`; everything else
-is `no-cache`. Unknown paths fall back to `index.html` (SPA-safe 404s).
+The optional Docker image builds with Bun 1.4.4 and serves with unprivileged
+Nginx. `nginx.conf` preserves port 5000, `nosniff`, immutable caching for hashed
+assets, and revalidation for other files. `.mjs` and `.wasm` need correct MIME
+types. Missing files return 404. Compose only publishes the static host port;
+`EZCONV_PORT` changes the host port. Existing reverse proxies can keep targeting
+container port 5000. The old runtime `HOST`, `PORT`, and `TZ` variables are unused.
 
 ## PWA / offline
 
@@ -124,18 +130,20 @@ incompatible asset layout.
 
 ## CI
 
-`.github/workflows/ci.yml` (ala ezhrm): one workflow —
+`.github/workflows/ci.yml` validates `main`, `master`, and `development` pushes,
+PRs, release tags and manual runs. It installs both lockfiles with Bun, runs
+Biome, Vitest and Vite, then uploads `dist/` as `ezconv-dist`. The push-only image
+job packages these static files in Nginx and publishes GHCR branch/release tags.
+There is no backend build or installation. Optional ntfy notifications remain.
 
-- **test** — Biome + vitest + vite build on pushes to `main`/`development`, PRs,
-  and manual dispatch.
-- **image** — GHCR build (amd64, buildx + GHA cache), push-only, gated on `test`.
-  Tags are branch-explicit: `main` → `:main` + `:latest` + `:sha-<12>`,
-  `development` → `:development` + `:sha-<12>` (never `:latest`), `v*` tags →
-  `:<tag>`. ntfy notify if `NTFY_URL` is set.
+## Dependency maintenance
 
-The Docker image is two-stage `oven/bun:1.3-alpine`: frozen-lockfile install of
-the root workspace (server deps), client build, then a runtime stage that serves
-as non-root `bun`.
+Use Bun for installs, scripts, tests and updates. Root dependencies are lint
+tooling only; frontend dependencies and build/test tooling live in `client/`.
+Vite 8 uses `@rolldown/plugin-babel` with `reactCompilerPreset()` for the React
+Compiler. SheetJS is pinned to its official 0.20.3 tarball, since npm's `xlsx`
+package remains on the older 0.18.5 release. All libraries are bundled into
+self-hosted assets at build time; the tarball URL is never fetched by browsers.
 
 ## Compression
 
