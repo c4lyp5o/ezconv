@@ -1,8 +1,8 @@
 import { PDFDocument } from "pdf-lib";
-import { compressionPlan, compressionWarnings } from "./compression";
+import { compressionPlan, compressionTarget, compressionWarnings } from "./compression";
 
 // PDF rendering uses DOM canvas/font APIs. Load it only for lossy PDF presets.
-async function openRenderer(buffer) {
+export async function openRenderer(buffer) {
 	const pdfjs = await import("pdfjs-dist");
 	const { default: workerSrc } = await import("pdfjs-dist/build/pdf.worker.min.mjs?url");
 	pdfjs.GlobalWorkerOptions.workerSrc = workerSrc;
@@ -71,8 +71,10 @@ export async function compressPdf(buffer, options, onProgress = () => {}) {
 	let flattened = false;
 	const optimized = await source.save({ useObjectStreams: true });
 	if (optimized.byteLength < best.byteLength) best = optimized;
-	const targetMet = () => best.byteLength <= buffer.byteLength * (1 - plan.reduction / 100);
-	if (plan.mode !== "best-effort" && !(plan.mode === "percentage" && targetMet())) {
+	const targetMet = () =>
+		compressionTarget(buffer.byteLength, plan) !== null &&
+		best.byteLength <= compressionTarget(buffer.byteLength, plan);
+	if (plan.mode !== "best-effort" && !(["percentage", "size"].includes(plan.mode) && targetMet())) {
 		const { pdf, close } = await openRenderer(buffer);
 		try {
 			for (const [index, step] of plan.steps.entries()) {
@@ -83,7 +85,7 @@ export async function compressPdf(buffer, options, onProgress = () => {}) {
 					best = bytes;
 					flattened = true;
 				}
-				if (plan.mode === "percentage" && targetMet()) break;
+				if (["percentage", "size"].includes(plan.mode) && targetMet()) break;
 			}
 		} finally {
 			await close();

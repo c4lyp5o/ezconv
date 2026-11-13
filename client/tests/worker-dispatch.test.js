@@ -339,3 +339,49 @@ describe("buildMediaArgs", () => {
 		expect(lossless).not.toContain("-b:a");
 	});
 });
+
+describe("media extraction and trim", () => {
+	it("extracts audio without adding video codecs or filters", () => {
+		const args = buildMediaArgs({
+			inputName: "in.mp4",
+			outputName: "out.mp3",
+			fromExt: "mp4",
+			toExt: "mp3",
+			resolution: "720",
+			bitrate: 128,
+			trimStart: "1.5",
+			trimEnd: "4",
+		});
+		expect(args).toContain("-vn");
+		expect(args).toContain("libmp3lame");
+		expect(args).not.toContain("-vf");
+		expect(args).not.toContain("libx264");
+		expect(args.slice(args.indexOf("-t"), args.indexOf("-t") + 2)).toEqual(["-t", "2.5"]);
+	});
+	it("re-encodes same-format inputs when trimming", () => {
+		const args = buildMediaArgs({
+			inputName: "in.mp3",
+			outputName: "out.mp3",
+			fromExt: "mp3",
+			toExt: "mp3",
+			trimEnd: 2,
+		});
+		expect(args).not.toContain("copy");
+		expect(args).toContain("libmp3lame");
+	});
+	it("rejects backwards trim ranges", () => {
+		expect(() => buildMediaArgs({ trimStart: 10, trimEnd: 5 })).toThrow("end must be greater");
+	});
+	it("encodes looping animated WebP without audio", () => {
+		const args = buildMediaArgs({
+			inputName: "in.mp4",
+			outputName: "out.webp",
+			fromExt: "mp4",
+			toExt: "webp",
+			animated: true,
+		});
+		expect(args).toContain("libwebp_anim");
+		expect(args).toContain("-an");
+		expect(args).toContain("-loop");
+	});
+});
