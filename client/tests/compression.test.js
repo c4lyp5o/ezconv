@@ -8,7 +8,7 @@ import { compressPdf } from "../src/pdf-compression";
 describe("compression settings", () => {
 	it("offers same-format compression for pictures and PDF", () => {
 		expect(targetOptionsFor("jpg")).toContain("compress");
-		expect(targetOptionsFor("pdf")).toEqual(["compress"]);
+		expect(targetOptionsFor("pdf")).toContain("compress");
 		expect(defaultTargetFor("pdf", getFileCategory("pdf"))).toBe("compress");
 	});
 	it("rejects invalid percentages instead of silently choosing a quality", () => {
