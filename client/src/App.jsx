@@ -8,6 +8,7 @@ import LogsPanel from "./components/LogsPanel";
 import Recipes from "./components/Recipes";
 import ResultCard from "./components/ResultCard";
 import Toast from "./components/Toast";
+import { ConversionWorker } from "./conversion-worker";
 import {
 	AnimatePresence,
 	Bar,
@@ -157,9 +158,22 @@ export default function App() {
 	}, []);
 
 	useEffect(() => {
-		const w = new Worker(new URL("./worker.js", import.meta.url), {
-			type: "module",
-		});
+		const w = new ConversionWorker(
+			() => new Worker(new URL("./worker.js", import.meta.url), { type: "module" }),
+			({ jobIds, message }) => {
+				const error = `${message}. Retry the failed files to start a fresh worker.`;
+				setFfmpegLoading(false);
+				setFfmpegProgress(0);
+				setToast({ message: error, type: "error" });
+				if (jobIds.length) {
+					runRef.current.failed += jobIds.length;
+					setJobs((prev) =>
+						prev.map((job) => (jobIds.includes(job.id) ? { ...job, status: "error", error } : job)),
+					);
+					finishIfRunDone();
+				}
+			},
+		);
 		workerRef.current = w;
 		w.onmessage = (e) => {
 			const { status, message, ratio, buffer, mime, warnings, jobId, filename } = e.data;

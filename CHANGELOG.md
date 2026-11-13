@@ -39,6 +39,8 @@ All notable changes to ezconv are documented here. Versions follow Semantic Vers
 
 ### Fixed
 
+- Service worker caches only successful full responses, retries cached errors, and tolerates cache storage failures.
+- Crashed conversion workers fail only their outstanding jobs and restart on retry without locking the queue.
 - Queue IDs fall back when `crypto.randomUUID` is unavailable on HTTP LAN origins; file additions and PDF/image combining still work.
 - CSV-to-XLSX now uses supported APIs and preserves identifiers/large integer strings.
 - FFmpeg exit codes are checked; temporary files are removed so failed jobs

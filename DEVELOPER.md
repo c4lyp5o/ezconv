@@ -36,6 +36,8 @@ Browser ── fetch ──> Static host (serves dist/)
 ## Job protocol
 
 The UI reads each input and sends worker jobs with transferable binary buffers.
+`ConversionWorker` lazily creates the native worker, isolates stale messages after
+a crash, fails only outstanding worker job IDs, and creates a fresh worker on retry.
 Worker jobs run serially; DOM-dependent jobs are awaited by the UI dispatch loop
 and can overlap a previously posted worker job. All completions share job IDs
 and run bookkeeping. PDF parsing uses PDF.js's own worker.
@@ -155,6 +157,8 @@ container port 5000. The old runtime `HOST`, `PORT`, and `TZ` variables are unus
 `client/public/sw.js` (cache `ezconv-v2.0.0`): assets cache-first (the 32 MB
 ffmpeg core becomes an offline asset after first use), everything else
 network-first with cache fallback. The release validator keeps the cache name aligned with the package version.
+Only successful full (HTTP 200) responses are cached. Cached errors are ignored;
+cache writes extend the fetch event lifetime and storage failures do not block responses.
 Older caches are retained for open tabs/offline fallback; they are not deleted
 on activation. Only features/assets already fetched online are available offline.
 
