@@ -1,9 +1,17 @@
 import wasmURL from "@ffmpeg/core/wasm?url";
 import coreURL from "@ffmpeg/core?url";
 import { FFmpeg } from "@ffmpeg/ffmpeg";
-import Papa from "papaparse";
-import * as XLSX from "xlsx";
-import { AUDIO_EXTENSIONS, IMAGE_EXTENSIONS, imageMimeFor, VIDEO_EXTENSIONS } from "./file-config";
+import { compressImage } from "./compression";
+import { convertData } from "./data-conversion";
+import {
+	AUDIO_EXTENSIONS,
+	DATA_EXTENSIONS,
+	IMAGE_EXTENSIONS,
+	imageMimeFor,
+	VIDEO_EXTENSIONS,
+} from "./file-config";
+import { convertPicture } from "./image-tools";
+import { runMediaConversion } from "./media-files";
 
 const MEDIA_EXTENSIONS = [...AUDIO_EXTENSIONS, ...VIDEO_EXTENSIONS];
 
@@ -15,48 +23,6 @@ let ffmpegInstance = null;
 let currentJobId = null;
 const post = (msg, transfer) => {
 	postMessage({ ...msg, jobId: currentJobId }, transfer || []);
-};
-
-// Serialize a workbook to xlsx bytes (exact slice — no slack from pooled buffers)
-const writeWorkbookFile = (wb) => {
-	const data = XLSX.write(wb, { bookType: "xlsx", type: "array" });
-	const mime = "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet";
-	const outBuffer = ArrayBuffer.isView(data)
-		? data.buffer.slice(data.byteOffset, data.byteOffset + data.byteLength)
-		: data;
-
-	return { mime, outBuffer };
-};
-
-// Create XLSX file from worksheet
-const createXlsxFile = (worksheet) => {
-	const wb = XLSX.utils.book_new();
-	XLSX.utils.book_append_sheet(wb, worksheet, "Sheet1");
-	return writeWorkbookFile(wb);
-};
-
-// Image conversion using Canvas API
-const convertImage = async (arrayBuffer, fromExt, toExt, quality) => {
-	try {
-		const blob = new Blob([arrayBuffer], { type: imageMimeFor(fromExt) });
-		const imageBitmap = await createImageBitmap(blob);
-
-		const canvas = new OffscreenCanvas(imageBitmap.width, imageBitmap.height);
-		const ctx = canvas.getContext("2d");
-		ctx.drawImage(imageBitmap, 0, 0);
-
-		imageBitmap.close();
-
-		// quality is honored for jpeg/webp and ignored by png
-		const outBlob = await canvas.convertToBlob({
-			type: imageMimeFor(toExt),
-			quality,
-		});
-		return await outBlob.arrayBuffer();
-	} catch (err) {
-		console.error("[worker] Image conversion failed", err);
-		throw new Error("Image conversion failed. The format may not be supported.");
-	}
 };
 
 // Initialize FFmpeg on first use — the core files are bundled assets served
@@ -94,41 +60,85 @@ const initFFmpeg = async () => {
 const LOSSY_AUDIO = ["mp3", "aac", "ogg", "m4a"];
 const SCALE_WIDTHS = { 1080: 1920, 720: 1280, 480: 854 };
 
-export const buildMediaArgs = ({ inputName, outputName, fromExt, toExt, resolution, bitrate }) => {
-	const args = ["-y", "-threads", "1", "-i", inputName];
-
-	// If same extension/container and no re-encode needed, stream copy first
-	const tryCopy = fromExt === toExt && MEDIA_EXTENSIONS.includes(fromExt);
-	if (tryCopy) {
-		// attempt container/codec copy (fast, low memory)
-		args.push("-c", "copy", outputName);
-		return args;
-	}
-
+export const buildMediaArgs = ({
+	inputName,
+	outputName,
+	fromExt,
+	toExt,
+	resolution,
+	bitrate,
+	trimStart,
+	trimEnd,
+	animated,
+}) => {
+	const start = Number(trimStart || 0),
+		end = trimEnd === "" || trimEnd == null ? null : Number(trimEnd);
+	if (
+		!Number.isFinite(start) ||
+		start < 0 ||
+		(end !== null && (!Number.isFinite(end) || end <= start))
+	)
+		throw new Error("Trim end must be greater than start (seconds)");
+	const args = ["-y", "-threads", "1"];
+	if (start) args.push("-ss", String(start));
+	args.push("-i", inputName);
+	if (end !== null) args.push("-t", String(end - start));
+	if (
+		fromExt === toExt &&
+		MEDIA_EXTENSIONS.includes(fromExt) &&
+		!start &&
+		end === null &&
+		!resolution &&
+		!bitrate
+	)
+		return [...args, "-c", "copy", outputName];
 	const width = SCALE_WIDTHS[resolution];
-	// keep aspect ratio, cap width; "original" skips scaling entirely
 	const scaleFilter = width ? `scale='min(${width},iw)':'-2'` : null;
 	const audioBitrate = bitrate ? ["-b:a", `${bitrate}k`] : [];
-
-	if (VIDEO_EXTENSIONS.includes(fromExt) || VIDEO_EXTENSIONS.includes(toExt)) {
-		// conservative defaults to keep wasm memory low: single thread,
-		// optional downscale, light codec params per target
-		let codec;
-		if (toExt === "webm") {
-			codec = ["-c:v", "libvpx", "-b:v", "1M", "-c:a", "libvorbis"];
-		} else if (toExt === "mp4" || toExt === "m4a") {
-			codec = ["-c:v", "libx264", "-preset", "veryfast", "-crf", "28", "-c:a", "aac"];
-		} else {
-			codec = ["-c:v", "libx264", "-preset", "veryfast", "-crf", "30", "-c:a", "aac"];
-		}
-		args.push(...(scaleFilter ? ["-vf", scaleFilter] : []), ...codec, ...audioBitrate, outputName);
-		return args;
+	if (AUDIO_EXTENSIONS.includes(toExt)) {
+		const codecs = {
+			mp3: "libmp3lame",
+			wav: "pcm_s16le",
+			aac: "aac",
+			flac: "flac",
+			ogg: "libvorbis",
+			m4a: "aac",
+		};
+		args.push("-vn", "-map", "0:a:0", "-c:a", codecs[toExt]);
+		if (LOSSY_AUDIO.includes(toExt)) args.push(...audioBitrate);
+		return [...args, outputName];
 	}
-
-	// audio / other media: simple conversion, bitrate only for lossy targets
-	if (LOSSY_AUDIO.includes(toExt)) args.push(...audioBitrate);
-	args.push(outputName);
-	return args;
+	if (toExt === "gif" || animated) {
+		args.push("-an", "-vf", ["fps=12", scaleFilter || "scale='min(640,iw)':-2"].join(","));
+		if (toExt === "gif") args.push("-loop", "0");
+		else args.push("-c:v", "libwebp_anim", "-quality", "70", "-loop", "0");
+		return [...args, outputName];
+	}
+	if (VIDEO_EXTENSIONS.includes(toExt)) {
+		const codec =
+			toExt === "webm"
+				? ["-c:v", "libvpx", "-b:v", "1M", "-c:a", "libvorbis"]
+				: [
+						"-c:v",
+						"libx264",
+						"-preset",
+						"veryfast",
+						"-crf",
+						"28",
+						"-pix_fmt",
+						"yuv420p",
+						"-c:a",
+						"aac",
+					];
+		return [
+			...args,
+			...(scaleFilter ? ["-vf", scaleFilter] : []),
+			...codec,
+			...audioBitrate,
+			outputName,
+		];
+	}
+	return [...args, outputName];
 };
 
 // Media conversion using FFmpeg
@@ -141,8 +151,6 @@ const convertMedia = async (arrayBuffer, fromExt, toExt, mediaOptions = {}) => {
 
 		post({ status: "log", message: `Writing ${inputName}` });
 
-		await ff.writeFile(inputName, new Uint8Array(arrayBuffer));
-
 		const args = buildMediaArgs({
 			inputName,
 			outputName,
@@ -150,29 +158,16 @@ const convertMedia = async (arrayBuffer, fromExt, toExt, mediaOptions = {}) => {
 			toExt,
 			resolution: mediaOptions.resolution,
 			bitrate: mediaOptions.bitrate,
+			trimStart: mediaOptions.trimStart,
+			trimEnd: mediaOptions.trimEnd,
+			animated: mediaOptions.animated,
 		});
 
 		post({
 			status: "log",
 			message: `Running ffmpeg ${args.join(" ")}`,
 		});
-		try {
-			await ff.exec(args);
-		} catch (err) {
-			console.error("[worker] ffmpeg exec error", err);
-			throw err;
-		}
-
-		post({ status: "log", message: `Reading ${outputName}` });
-		let data;
-		try {
-			data = await ff.readFile(outputName);
-		} catch (err) {
-			console.error("[worker] ffmpeg readFile error", err);
-			throw err;
-		}
-
-		const outBuffer = data.buffer;
+		const outBuffer = await runMediaConversion(ff, inputName, outputName, arrayBuffer, args);
 		post({
 			status: "log",
 			message: `Conversion finished: ${outputName} (${outBuffer.byteLength} bytes)`,
@@ -193,91 +188,51 @@ const handleConvert = async ({
 	quality,
 	mediaOptions,
 	jobId,
+	compressionOptions,
+	imageOptions,
 }) => {
 	currentJobId = jobId ?? null;
 	try {
-		const outName = `${filename.replace(/\.[^.]+$/, "")}.${target}`;
+		let outName = `${filename.replace(/\.[^.]+$/, "")}.${target}`;
 		const warnings = [];
 		let mime = "application/octet-stream";
 		let outBuffer;
 
-		if (ext === "json") {
-			let json;
-			try {
-				const src = typeof text === "string" ? text : new TextDecoder().decode(arrayBuffer);
-				json = JSON.parse(src);
-			} catch (err) {
-				throw new Error(`Invalid JSON input: ${err.message || String(err)}`);
-			}
-			// normalize to a row array: a plain object becomes one row instead
-			// of silently producing an empty "successful" output
-			let rows;
-			if (Array.isArray(json)) {
-				rows = json;
-			} else if (json && typeof json === "object") {
-				rows = [json];
-			} else {
-				throw new Error("JSON must be an object or an array of objects");
-			}
-			if (target === "csv") {
-				const csv = Papa.unparse(rows);
-				if (rows.length > 0 && !csv) {
-					throw new Error("JSON produced an empty CSV");
-				}
-				mime = "text/csv;charset=utf-8";
-				outBuffer = new TextEncoder().encode(csv).buffer;
-			} else if (target === "xlsx") {
-				({ mime, outBuffer } = createXlsxFile(XLSX.utils.json_to_sheet(rows)));
-			}
-		} else if (ext === "csv") {
-			const csvText = typeof text === "string" ? text : new TextDecoder().decode(arrayBuffer);
-			if (target === "json") {
-				let res;
-				try {
-					res = Papa.parse(csvText, {
-						header: true,
-						// no dynamicTyping: a converter must not rewrite "007" to 7
-						skipEmptyLines: true,
-					});
-				} catch (err) {
-					throw new Error(`CSV parse error: ${err.message || String(err)}`);
-				}
-				const json = res.data;
-				const jsonStr = JSON.stringify(json, null, 2);
-				mime = "application/json;charset=utf-8";
-				outBuffer = new TextEncoder().encode(jsonStr).buffer;
-			} else if (target === "xlsx") {
-				const ws = XLSX.utils.csv_to_sheet(csvText);
-				({ mime, outBuffer } = createXlsxFile(ws));
-			}
-		} else if (ext === "xlsx" || ext === "xls") {
-			const ab = arrayBuffer;
-			const wb = XLSX.read(ab, { type: "array" });
-			const first = wb.SheetNames[0];
-			const ws = wb.Sheets[first];
-			// xlsx target re-emits every sheet; json/csv can only carry one
-			if (target !== "xlsx" && wb.SheetNames.length > 1) {
-				warnings.push(`${wb.SheetNames.length} sheets found — only "${first}" was exported`);
-			}
-			if (target === "json") {
-				const json = XLSX.utils.sheet_to_json(ws, { defval: null });
-				const jsonStr = JSON.stringify(json, null, 2);
-				mime = "application/json;charset=utf-8";
-				outBuffer = new TextEncoder().encode(jsonStr).buffer;
-			} else if (target === "csv") {
-				const csv = XLSX.utils.sheet_to_csv(ws);
-				mime = "text/csv;charset=utf-8";
-				outBuffer = new TextEncoder().encode(csv).buffer;
-			} else if (target === "xlsx") {
-				// re-emit the whole workbook so every sheet survives (e.g. xls -> xlsx)
-				({ mime, outBuffer } = writeWorkbookFile(wb));
-			}
+		if (
+			(ext === "gif" && VIDEO_EXTENSIONS.includes(target)) ||
+			target === "animated-webp" ||
+			(MEDIA_EXTENSIONS.includes(ext) && target === "gif")
+		) {
+			const actualTarget = target === "animated-webp" ? "webp" : target;
+			outBuffer = await convertMedia(arrayBuffer, ext, actualTarget, {
+				...mediaOptions,
+				animated: target === "animated-webp",
+			});
+			mime =
+				actualTarget === "webp"
+					? "image/webp"
+					: actualTarget === "gif"
+						? "image/gif"
+						: actualTarget === "webm"
+							? "video/webm"
+							: "video/mp4";
+			outName = `${filename.replace(/\.[^.]+$/, "")}.${actualTarget}`;
+		} else if (target === "compress" && IMAGE_EXTENSIONS.includes(ext)) {
+			const result = await compressImage(arrayBuffer, ext, compressionOptions, imageOptions);
+			({ outBuffer, mime } = result);
+			warnings.push(...result.warnings);
+			outName = `${filename.replace(/\.[^.]+$/, "")}.compressed.${result.ext}`;
+		} else if (DATA_EXTENSIONS.includes(ext)) {
+			if (ext === target) throw new Error(`Unsupported conversion: ${ext} to ${target}`);
+			const result = convertData({ ext, target, text, arrayBuffer });
+			({ outBuffer, mime } = result);
+			warnings.push(...result.warnings);
 		} else if (IMAGE_EXTENSIONS.includes(ext)) {
 			// Convert image format using Canvas API
 			if (ext === "gif") {
 				warnings.push("gif animation flattened to a single frame");
 			}
-			outBuffer = await convertImage(arrayBuffer, ext, target, quality);
+			outBuffer = await convertPicture(arrayBuffer, ext, target, quality, imageOptions);
 			mime = imageMimeFor(target);
 		} else if (MEDIA_EXTENSIONS.includes(ext)) {
 			// Convert using FFmpeg

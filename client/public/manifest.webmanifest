@@ -1,7 +1,7 @@
 {
 	"name": "ezconv",
 	"short_name": "ezconv",
-	"description": "Convert images, audio, video, and data files locally in your browser.",
+	"description": "Convert, compress, edit and extract images, PDFs, audio, video, documents, data and ZIPs locally.",
 	"start_url": "/",
 	"display": "standalone",
 	"background_color": "#171719",

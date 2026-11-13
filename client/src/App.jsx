@@ -1,10 +1,14 @@
-import JSZip from "jszip";
 import { useCallback, useEffect, useRef, useState } from "react";
+import { createArchive } from "./archive";
+import { isBrowserJob, runBrowserJob } from "./browser-conversion";
+import CompressionControls from "./components/CompressionControls";
 import DropZone from "./components/DropZone";
 import JobRow from "./components/JobRow";
 import LogsPanel from "./components/LogsPanel";
+import Recipes from "./components/Recipes";
 import ResultCard from "./components/ResultCard";
 import Toast from "./components/Toast";
+import { ConversionWorker } from "./conversion-worker";
 import {
 	AnimatePresence,
 	Bar,
@@ -32,10 +36,20 @@ import {
 	selectCls,
 } from "./ez/ui";
 import { ALL_EXTENSIONS, AUDIO_EXTENSIONS, getFileCategory, VIDEO_EXTENSIONS } from "./file-config";
-import { defaultTargetFor, getFileExtension, humanBytes, sizeNote } from "./format";
+import {
+	defaultTargetFor,
+	getFileExtension,
+	humanBytes,
+	sizeNote,
+	targetOptionsFor,
+} from "./format";
+import { createJobId } from "./job-id";
 
 // File size limits per category (bytes)
 const SIZE_LIMITS = {
+	text: 5 * 1024 * 1024,
+	archive: 80 * 1024 * 1024,
+	document: 30 * 1024 * 1024,
 	data: 10 * 1024 * 1024, // 10 MB
 	image: 15 * 1024 * 1024, // 15 MB
 	audio: 80 * 1024 * 1024, // 80 MB
@@ -46,6 +60,7 @@ const LOSSY_TARGETS = ["jpg", "jpeg", "webp"];
 
 export default function App() {
 	const [jobs, setJobs] = useState([]);
+	const [activeRecipe, setActiveRecipe] = useState(null);
 	const [status, setStatus] = useState("Idle");
 	const [toast, setToast] = useState(null);
 	const [isDragging, setIsDragging] = useState(false);
@@ -61,6 +76,10 @@ export default function App() {
 	// media output controls ("720" preserves the old min(1280, iw) cap)
 	const [resolution, setResolution] = useState("720");
 	const [bitrate, setBitrate] = useState(192);
+	const [compressionOptions, setCompressionOptions] = useState({
+		mode: "best-effort",
+		reduction: 50,
+	});
 
 	// last successful conversion: kept alive for preview / re-download / copy
 	const [result, setResult] = useState(null);
@@ -108,7 +127,13 @@ export default function App() {
 		const blob = new Blob([buffer], { type: mime || "application/octet-stream" });
 		const url = URL.createObjectURL(blob);
 		const isImage = (mime || "").startsWith("image/");
-		const isText = mime === "text/csv;charset=utf-8" || mime === "application/json;charset=utf-8";
+		const isText =
+			mime?.startsWith("text/") ||
+			[
+				"application/json;charset=utf-8",
+				"application/yaml;charset=utf-8",
+				"application/x-ndjson;charset=utf-8",
+			].includes(mime);
 		return {
 			name: outName || "output",
 			mime,
@@ -133,9 +158,22 @@ export default function App() {
 	}, []);
 
 	useEffect(() => {
-		const w = new Worker(new URL("./worker.js", import.meta.url), {
-			type: "module",
-		});
+		const w = new ConversionWorker(
+			() => new Worker(new URL("./worker.js", import.meta.url), { type: "module" }),
+			({ jobIds, message }) => {
+				const error = `${message}. Retry the failed files to start a fresh worker.`;
+				setFfmpegLoading(false);
+				setFfmpegProgress(0);
+				setToast({ message: error, type: "error" });
+				if (jobIds.length) {
+					runRef.current.failed += jobIds.length;
+					setJobs((prev) =>
+						prev.map((job) => (jobIds.includes(job.id) ? { ...job, status: "error", error } : job)),
+					);
+					finishIfRunDone();
+				}
+			},
+		);
 		workerRef.current = w;
 		w.onmessage = (e) => {
 			const { status, message, ratio, buffer, mime, warnings, jobId, filename } = e.data;
@@ -151,6 +189,9 @@ export default function App() {
 				case "log":
 					setFfmpegLogs((s) => [...s.slice(-199), message]);
 					break;
+				case "compression-progress":
+					setJobs((prev) => prev.map((j) => (j.id === jobId ? { ...j, progress: ratio } : j)));
+					break;
 				case "ffmpeg-progress":
 					setFfmpegProgress(Number(ratio || 0));
 					setJobs((prev) =>
@@ -161,9 +202,13 @@ export default function App() {
 					runRef.current.done += 1;
 					const res = buildResult(filename, sizeMapRef.current[jobId] ?? 0, buffer, mime, warnings);
 					setJobs((prev) =>
-						prev.map((j) =>
-							j.id === jobId ? { ...j, status: "done", progress: 1, result: res } : j,
-						),
+						prev.map((j) => {
+							if (j.id !== jobId) return j;
+							if (j.result?.url && j.result.url !== resultUrlRef.current) {
+								URL.revokeObjectURL(j.result.url);
+							}
+							return { ...j, status: "done", progress: 1, result: res };
+						}),
 					);
 					// single-file runs keep the classic auto-download + size toast
 					if (runRef.current.autoDownload) {
@@ -232,6 +277,7 @@ export default function App() {
 			for (const j of prev) if (j.result?.url) URL.revokeObjectURL(j.result.url);
 			return [];
 		});
+		setActiveRecipe(null);
 		setStatus("Idle");
 		setToast(null);
 		setResult((prev) => {
@@ -265,12 +311,18 @@ export default function App() {
 				continue;
 			}
 			accepted.push({
-				id: crypto.randomUUID(),
+				id: createJobId(),
 				file: f,
 				ext: newExt,
 				category,
-				target: defaultTargetFor(newExt, category),
-				status: "ready",
+				target: targetOptionsFor(newExt).includes(activeRecipe?.targets?.[category])
+					? activeRecipe.targets[category]
+					: defaultTargetFor(newExt, category),
+				options: {
+					...(activeRecipe?.options?.[category] || {}),
+					...(category === "image" ? activeRecipe?.imageOptions : {}),
+				},
+				status: category === "archive" ? "archive" : "ready",
 				progress: 0,
 				result: null,
 				error: null,
@@ -290,7 +342,78 @@ export default function App() {
 	}
 
 	function setJobTarget(id, target) {
-		setJobs((prev) => prev.map((j) => (j.id === id ? { ...j, target } : j)));
+		setJobs((prev) =>
+			prev.map((j) => (j.id === id ? { ...j, target, status: "ready", error: null } : j)),
+		);
+	}
+
+	function setJobOptions(id, options) {
+		setJobs((prev) =>
+			prev.map((j) => (j.id === id ? { ...j, options, status: "ready", error: null } : j)),
+		);
+	}
+
+	function applyRecipe(recipe) {
+		setActiveRecipe(recipe);
+		if (recipe.compressionOptions) setCompressionOptions(recipe.compressionOptions);
+		if (recipe.quality != null) setQuality(recipe.quality);
+		if (recipe.bitrate != null) setBitrate(recipe.bitrate);
+		if (recipe.resolution) setResolution(recipe.resolution);
+		setJobs((prev) =>
+			prev.map((job) => {
+				if (job.category === "archive" || job.sourceFiles) return job;
+				return {
+					...job,
+					target: targetOptionsFor(job.ext).includes(recipe.targets?.[job.category])
+						? recipe.targets[job.category]
+						: job.target,
+					options: {
+						...job.options,
+						...recipe.options?.[job.category],
+						...(job.category === "image" ? recipe.imageOptions : {}),
+					},
+					status: "ready",
+					error: null,
+				};
+			}),
+		);
+	}
+
+	function captureRecipe() {
+		const targets = {},
+			options = {};
+		for (const job of jobs)
+			if (!targets[job.category] && !job.sourceFiles && job.category !== "archive") {
+				targets[job.category] = job.target;
+				options[job.category] = job.options || {};
+			}
+		return { targets, options, quality, resolution, bitrate, compressionOptions };
+	}
+
+	async function handleBundle(category) {
+		if (isConverting) return;
+		const files = jobs
+			.filter((job) => !job.sourceFiles && job.category === category && job.file.arrayBuffer)
+			.map((job) => job.file);
+		if (files.length < 2) return;
+		const job = {
+			id: createJobId(),
+			file: {
+				name: category === "image" ? "combined-images.pdf" : "merged.pdf",
+				size: files.reduce((n, f) => n + f.size, 0),
+			},
+			ext: category === "image" ? "image-bundle" : "pdf-bundle",
+			category: "document",
+			target: "pdf",
+			sourceFiles: files,
+			sourceOptions: jobs
+				.filter((j) => !j.sourceFiles && j.category === category && j.file.arrayBuffer)
+				.map((j) => j.options || {}),
+			status: "ready",
+			progress: 0,
+		};
+		setJobs((prev) => [...prev, job]);
+		await runJobs([job]);
 	}
 
 	function removeJob(id) {
@@ -302,9 +425,15 @@ export default function App() {
 	}
 
 	async function handleConvertAll() {
-		if (isConverting || !workerRef.current) return;
-		const pending = jobs.filter((j) => j.status === "ready" || j.status === "error");
-		if (pending.length === 0) return;
+		await runJobs(
+			jobs.filter(
+				(j) => j.category !== "archive" && (j.status === "ready" || j.status === "error"),
+			),
+		);
+	}
+
+	async function runJobs(pending) {
+		if (isConverting || !workerRef.current || pending.length === 0) return;
 
 		setIsConverting(true);
 		runRef.current = {
@@ -352,8 +481,32 @@ export default function App() {
 				if (LOSSY_TARGETS.includes(job.target)) {
 					messagePayload.quality = quality;
 				}
-				if (job.category === "audio" || job.category === "video") {
-					messagePayload.mediaOptions = { resolution, bitrate };
+				if (job.category === "audio" || job.category === "video" || job.ext === "gif") {
+					messagePayload.mediaOptions = { resolution, bitrate, ...job.options };
+				}
+				if (job.target === "compress") messagePayload.compressionOptions = compressionOptions;
+				if (job.category === "image") messagePayload.imageOptions = job.options;
+				if (isBrowserJob(job)) {
+					const output = await runBrowserJob(
+						job,
+						compressionOptions,
+						(ratio) =>
+							workerRef.current.onmessage({
+								data: { status: "compression-progress", jobId: job.id, ratio },
+							}),
+						quality,
+					);
+					workerRef.current.onmessage({
+						data: {
+							status: "done",
+							jobId: job.id,
+							filename: `${job.file.name.replace(/\.[^.]+$/, "")}.${output.suffix}`,
+							buffer: output.outBuffer,
+							mime: output.mime,
+							warnings: output.warnings,
+						},
+					});
+					continue;
 				}
 				const isBinary =
 					job.ext === "xlsx" ||
@@ -385,10 +538,7 @@ export default function App() {
 	async function handleZip() {
 		const done = jobs.filter((j) => j.status === "done" && j.result?.blob);
 		if (done.length === 0) return;
-		const zip = new JSZip();
-		for (const j of done) {
-			zip.file(j.result.name, j.result.blob);
-		}
+		const zip = createArchive(done.map((j) => j.result));
 		const zipBlob = await zip.generateAsync({ type: "blob", compression: "STORE" });
 		const url = URL.createObjectURL(zipBlob);
 		const a = document.createElement("a");
@@ -404,16 +554,20 @@ export default function App() {
 	const acceptString = ALL_EXTENSIONS.map((e) => `.${e}`).join(",");
 	const doneCount = jobs.filter((j) => j.status === "done").length;
 	const showQuality = jobs.some((j) => LOSSY_TARGETS.includes(j.target));
-	const isMedia = jobs.some((j) => [...VIDEO_EXTENSIONS, ...AUDIO_EXTENSIONS].includes(j.ext));
+	const isMedia = jobs.some(
+		(j) =>
+			[...VIDEO_EXTENSIONS, ...AUDIO_EXTENSIONS].includes(j.ext) ||
+			(j.ext === "gif" && ["mp4", "webm", "animated-webp"].includes(j.target)),
+	);
 
 	const failedCount = jobs.filter((j) => j.status === "error").length;
 	const totalBytes = jobs.reduce((n, j) => n + j.file.size, 0);
 
 	return (
 		<Shell
-			brand={<Brand name="ezconv" glyph="cv" scope="Runs in your browser" />}
+			brand={<Brand name="ezconv" glyph="cv" scope="Self-hosted file converter" />}
 			title="Convert"
-			sub="Images, audio, video and data files. Nothing is uploaded."
+			sub="Convert, compress, edit and extract images, PDFs, audio, video, documents, data and ZIPs. Everything stays on your device."
 			width="max-w-[1120px]"
 		>
 			<div className="pointer-events-none fixed top-16 right-4 z-50 w-[min(380px,calc(100vw-2rem))]">
@@ -434,6 +588,17 @@ export default function App() {
 			</div>
 
 			<Stagger className="grid gap-6 lg:grid-cols-[minmax(0,1fr)_320px]">
+				<StaggerItem className="lg:col-span-2">
+					<DropZone
+						onFiles={addFiles}
+						disabled={isConverting}
+						isDragging={isDragging}
+						setIsDragging={setIsDragging}
+						inputRef={inputRef}
+						acceptString={acceptString}
+						empty={jobs.length === 0}
+					/>
+				</StaggerItem>
 				<StaggerItem className="space-y-4">
 					<Collapse open={ffmpegLoading}>
 						<Notice tone="warn">
@@ -447,15 +612,12 @@ export default function App() {
 						</Notice>
 					</Collapse>
 
-					<DropZone
-						onFiles={addFiles}
-						disabled={isConverting}
-						isDragging={isDragging}
-						setIsDragging={setIsDragging}
-						inputRef={inputRef}
-						acceptString={acceptString}
-						empty={jobs.length === 0}
-					/>
+					<section className={`${panel} p-5`}>
+						<Recipes current={captureRecipe()} onApply={applyRecipe} disabled={isConverting} />
+						{activeRecipe && (
+							<p className="mt-2 text-[12px] text-mute">Applied: {activeRecipe.name}</p>
+						)}
+					</section>
 
 					{jobs.length > 0 && (
 						<section className={panel}>
@@ -474,6 +636,8 @@ export default function App() {
 												disabled={isConverting}
 												onTarget={setJobTarget}
 												onRemove={removeJob}
+												onOptions={setJobOptions}
+												onFiles={addFiles}
 											/>
 										</SlideRow>
 									))}
@@ -482,9 +646,17 @@ export default function App() {
 						</section>
 					)}
 
-					<Collapse open={showQuality || isMedia}>
+					<Collapse open={showQuality || isMedia || jobs.some((j) => j.target === "compress")}>
 						<section className={`${panel} space-y-4 p-5`}>
 							<SectionLabel>Output</SectionLabel>
+							{jobs.some((j) => j.target === "compress") && (
+								<CompressionControls
+									value={compressionOptions}
+									onChange={setCompressionOptions}
+									disabled={isConverting}
+									hasPdf={jobs.some((j) => j.ext === "pdf" && j.target === "compress")}
+								/>
+							)}
 							{showQuality && (
 								<div>
 									<label htmlFor="quality-range" className={labelCls}>
@@ -545,11 +717,34 @@ export default function App() {
 					</Collapse>
 
 					<div className="flex flex-wrap gap-2">
+						{jobs.filter((j) => j.ext === "pdf").length >= 2 && (
+							<button
+								type="button"
+								className={cx(btn.base, btn.ghost)}
+								disabled={isConverting}
+								onClick={() => handleBundle("document")}
+							>
+								Merge all PDFs
+							</button>
+						)}
+						{jobs.filter((j) => j.category === "image").length >= 2 && (
+							<button
+								type="button"
+								className={cx(btn.base, btn.ghost)}
+								disabled={isConverting}
+								onClick={() => handleBundle("image")}
+							>
+								Combine images into PDF
+							</button>
+						)}
 						<button
 							type="button"
 							onClick={handleConvertAll}
 							className={cx(btn.base, btn.primary)}
-							disabled={isConverting || jobs.length === 0}
+							disabled={
+								isConverting ||
+								!jobs.some((j) => j.category !== "archive" && ["ready", "error"].includes(j.status))
+							}
 						>
 							{isConverting && <Spinner />}
 							{jobs.length > 1 ? "Convert all" : "Convert"}
@@ -648,21 +843,6 @@ export default function App() {
 							onToggle={() => setShowLogs((s) => !s)}
 						/>
 					)}
-
-					<p className="flex gap-2 px-1 text-[12px] leading-relaxed text-mute">
-						<svg
-							viewBox="0 0 20 20"
-							className="mt-0.5 h-3.5 w-3.5 flex-none"
-							fill="none"
-							stroke="currentColor"
-							strokeWidth="1.6"
-							aria-hidden
-						>
-							<rect x="4" y="9" width="12" height="8" rx="1.5" />
-							<path d="M7 9V6.5a3 3 0 0 1 6 0V9" />
-						</svg>
-						Files never leave your browser. Conversion runs in a Web Worker.
-					</p>
 				</StaggerItem>
 			</Stagger>
 		</Shell>

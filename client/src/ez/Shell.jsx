@@ -189,7 +189,7 @@ export function Shell({
 	}, [drawer]);
 
 	const header = title && (
-		<div className="flex flex-wrap items-baseline gap-x-3 gap-y-1">
+		<div className="grid gap-y-1">
 			<h1 className="text-[24px] font-semibold tracking-[-0.01em] text-ink">{title}</h1>
 			{sub && <p className="text-[14px] text-mute">{sub}</p>}
 			{aside && (
