@@ -574,6 +574,17 @@ export default function App() {
 			</div>
 
 			<Stagger className="grid gap-6 lg:grid-cols-[minmax(0,1fr)_320px]">
+				<StaggerItem className="lg:col-span-2">
+					<DropZone
+						onFiles={addFiles}
+						disabled={isConverting}
+						isDragging={isDragging}
+						setIsDragging={setIsDragging}
+						inputRef={inputRef}
+						acceptString={acceptString}
+						empty={jobs.length === 0}
+					/>
+				</StaggerItem>
 				<StaggerItem className="space-y-4">
 					<Collapse open={ffmpegLoading}>
 						<Notice tone="warn">
@@ -593,16 +604,6 @@ export default function App() {
 							<p className="mt-2 text-[12px] text-mute">Applied: {activeRecipe.name}</p>
 						)}
 					</section>
-
-					<DropZone
-						onFiles={addFiles}
-						disabled={isConverting}
-						isDragging={isDragging}
-						setIsDragging={setIsDragging}
-						inputRef={inputRef}
-						acceptString={acceptString}
-						empty={jobs.length === 0}
-					/>
 
 					{jobs.length > 0 && (
 						<section className={panel}>
@@ -828,21 +829,6 @@ export default function App() {
 							onToggle={() => setShowLogs((s) => !s)}
 						/>
 					)}
-
-					<p className="flex gap-2 px-1 text-[12px] leading-relaxed text-mute">
-						<svg
-							viewBox="0 0 20 20"
-							className="mt-0.5 h-3.5 w-3.5 flex-none"
-							fill="none"
-							stroke="currentColor"
-							strokeWidth="1.6"
-							aria-hidden
-						>
-							<rect x="4" y="9" width="12" height="8" rx="1.5" />
-							<path d="M7 9V6.5a3 3 0 0 1 6 0V9" />
-						</svg>
-						Files never leave your browser. Conversion and compression run locally.
-					</p>
 				</StaggerItem>
 			</Stagger>
 		</Shell>
