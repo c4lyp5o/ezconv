@@ -36,6 +36,19 @@ const makeWorkbook = (sheets) => {
 };
 
 describe("worker dispatch: spreadsheet conversions", () => {
+	it("converts CSV to XLSX without coercing identifiers or large integers", async () => {
+		const out = await drive({
+			filename: "ids.csv",
+			ext: "csv",
+			target: "xlsx",
+			text: "id,amount\n007,1234567890123456789",
+		});
+		expect(out[0].status).toBe("done");
+		const wb = XLSX.read(out[0].buffer, { type: "array" });
+		expect(XLSX.utils.sheet_to_json(wb.Sheets[wb.SheetNames[0]])).toEqual([
+			{ id: "007", amount: "1234567890123456789" },
+		]);
+	});
 	it("converts xls to xlsx and keeps every sheet", async () => {
 		const wb = makeWorkbook([
 			["Sheet1", [{ a: 1 }]],

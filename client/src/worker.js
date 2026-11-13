@@ -247,7 +247,9 @@ const handleConvert = async ({
 				mime = "application/json;charset=utf-8";
 				outBuffer = new TextEncoder().encode(jsonStr).buffer;
 			} else if (target === "xlsx") {
-				const ws = XLSX.utils.csv_to_sheet(csvText);
+				const parsed = Papa.parse(csvText, { skipEmptyLines: true });
+				if (parsed.errors.length) throw new Error(`CSV parse error: ${parsed.errors[0].message}`);
+				const ws = XLSX.utils.aoa_to_sheet(parsed.data);
 				({ mime, outBuffer } = createXlsxFile(ws));
 			}
 		} else if (ext === "xlsx" || ext === "xls") {
