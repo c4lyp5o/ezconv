@@ -59,19 +59,43 @@ Reply (worker → App) — `post()` in `worker.js` stamps `jobId` on **every** m
 GIF flatten); the toast shows them via its `note` slot. Failures post **one**
 error message — the inner catch blocks rethrow instead of double-posting.
 
-## Media pipeline
+## Conversion pipelines
 
-`buildMediaArgs()` (exported from `worker.js`, unit-tested) is the single source
-of truth for ffmpeg arguments:
+`worker.js` serializes data/image/media jobs. `buildMediaArgs()` owns audio stream
+mapping, codec selection, trim validation, single-thread encoding, and animation
+settings. Stream copy only applies without encoding/trim options. Media outputs
+pass through `media-files.js` for exit checks, exact buffer slicing and cleanup.
 
-- same extension + known media → `-c copy` stream remux (options ignored, by design)
-- video or video-target → optional `-vf scale='min(W,iw)':'-2'` (`Original` = no
-  `-vf`), codec per target (`libvpx`+vorbis for webm, `libx264`+aac otherwise),
-  `-b:a <bitrate>k` on re-encodes
-- audio → bare conversion; `-b:a` only for lossy targets (`mp3`, `aac`, `ogg`, `m4a`)
+`data-conversion.js` uses Papa Parse, SheetJS and YAML. CSV/TSV preserve strings;
+JSON Lines report the failing line. YAML alias expansion is bounded. XLSX output
+preserves every sheet; text exports warn about the first-sheet-only behavior.
 
-Defaults preserve historical behavior: resolution `720` (the old `min(1280,iw)`
-cap), bitrate `192k`.
+`image-tools.js` crops first, fits within dimensions without upscaling, rotates,
+and optionally fills a background. Canvas re-encoding removes source metadata.
+`compression.js` keeps same-format originals only when edits/metadata stripping
+were not requested. Image operations are capped at 40 megapixels / 12000px.
+SVG jobs use `svg-tools.js` on the browser thread because worker ImageBitmap
+cannot decode SVG reliably; sanitized SVG is rendered without external images.
+
+`browser-conversion.js` dispatches DOM-dependent jobs through the same completion
+handler/job IDs. `pdf-tools.js` merges or extracts PDF pages with pdf-lib, combines
+pictures into PDF, and renders selected pages to PNG/JPEG inside ZIPs. PDF ranges
+are 1-based, preserve requested order and deduplicate overlapping selections.
+`text-tools.js` sanitizes Markdown HTML with DOMPurify and renders paginated
+Unicode text/basic Markdown PDFs with canvas. These PDF pages are images, with
+no selectable text; the UI explains that before conversion. PDF.js parsing runs
+in its own worker. Rendering yields between document pages.
+
+`zip-tools.js` inspects JSZip's uncompressed size metadata before extracting a
+selection. Limits are 80 MB input/per-file, 200 MB expanded total, 200 entries.
+Extracted download names use the leaf filename. `ArchivePanel` handles previews,
+per-entry extraction and selected queue additions. Nested archives are never
+automatically queued. Archive rows are excluded from Convert all.
+
+`recipes.js` provides built-in recipes and validates loading browser-saved
+settings. Recipes persist only settings in localStorage (up to 20), never files.
+The UI applies target/encoder settings to queued and newly added files. Saving
+uses the first queued file per category for target and per-file options.
 
 ## Conventions & invariants
 
@@ -149,9 +173,9 @@ self-hosted assets at build time; the tarball URL is never fetched by browsers.
 
 `compression.js` owns presets, bounded image encoding attempts and size-target
 warnings. The worker accepts `target: "compress"` and
-`compressionOptions: { mode: "best-effort" | "balanced" | "best-compression" | "percentage", reduction: 50 }`.
+`compressionOptions: { mode: "best-effort" | "balanced" | "best-compression" | "percentage" | "size", reduction: 50, targetMB: 2, minQuality: 0.3 }`.
 Picture compression keeps JPEG/PNG/WebP formats and uses PNG for other inputs.
-Results never exceed the original size when the format is unchanged.
+Results never exceed the original size when the format is unchanged and no explicit edits or metadata removal were requested.
 
 PDFs are handled by lazy-loaded `pdf-compression.js` in the browser, using the
 same job IDs, progress and result messages as worker jobs. PDF.js parsing runs in
@@ -164,3 +188,8 @@ PDF rasterization removes document semantics and is explicitly described in the 
 
 `media-files.js` checks FFmpeg exit codes and removes input/output files in a
 finally block. `archive.js` assigns unique ZIP entries, including suffix collisions.
+
+`compressionTarget()` distinguishes a percentage of input bytes from an absolute
+MB budget. Size mode never lowers encoder quality below `minQuality`, but may
+reduce dimensions/DPI. Missed targets return the smallest candidate with a
+warning. PNG quality is fixed by browsers, so resizing is its primary reduction.

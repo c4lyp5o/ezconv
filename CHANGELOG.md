@@ -2,6 +2,12 @@
 
 ## Unreleased
 
+- Add PDF page images, split/extract/reorder, merge, and images-to-PDF tools.
+- Add video-to-audio extraction/trimming, GIF/animated WebP exports, and GIF-to-video.
+- Add picture crop/resize/rotation/background/metadata tools and browser SVG rendering.
+- Add Markdown-to-HTML/PDF, text-to-PDF, JSON Lines/YAML/TSV conversions, and ZIP selection/extraction.
+- Add target size budgets with quality floors, built-in presets, and locally saved recipes.
+
 - Fix CSV-to-XLSX conversion, FFmpeg exit handling/file cleanup, and ZIP name collisions.
 - Add local picture/PDF compression presets and percentage size targets.
 - Update dependencies, migrate to Vite 8/Vitest 5, and use the official SheetJS 0.20.3 release.
