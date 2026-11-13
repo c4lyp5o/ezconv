@@ -552,8 +552,8 @@ export default function App() {
 	return (
 		<Shell
 			brand={<Brand name="ezconv" glyph="cv" scope="Runs in your browser" />}
-			title="Convert"
-			sub="Convert files. Compress pictures and PDFs. Nothing is uploaded."
+			title="File toolkit"
+			sub="Convert, compress, edit and extract images, PDFs, audio, video, documents, data and ZIPs. Everything stays on your device."
 			width="max-w-[1120px]"
 		>
 			<div className="pointer-events-none fixed top-16 right-4 z-50 w-[min(380px,calc(100vw-2rem))]">
