@@ -2,6 +2,7 @@ import wasmURL from "@ffmpeg/core/wasm?url";
 import coreURL from "@ffmpeg/core?url";
 import { FFmpeg } from "@ffmpeg/ffmpeg";
 import Papa from "papaparse";
+import { runMediaConversion } from "./media-files";
 import * as XLSX from "xlsx";
 import { AUDIO_EXTENSIONS, IMAGE_EXTENSIONS, imageMimeFor, VIDEO_EXTENSIONS } from "./file-config";
 
@@ -141,7 +142,6 @@ const convertMedia = async (arrayBuffer, fromExt, toExt, mediaOptions = {}) => {
 
 		post({ status: "log", message: `Writing ${inputName}` });
 
-		await ff.writeFile(inputName, new Uint8Array(arrayBuffer));
 
 		const args = buildMediaArgs({
 			inputName,
@@ -156,23 +156,7 @@ const convertMedia = async (arrayBuffer, fromExt, toExt, mediaOptions = {}) => {
 			status: "log",
 			message: `Running ffmpeg ${args.join(" ")}`,
 		});
-		try {
-			await ff.exec(args);
-		} catch (err) {
-			console.error("[worker] ffmpeg exec error", err);
-			throw err;
-		}
-
-		post({ status: "log", message: `Reading ${outputName}` });
-		let data;
-		try {
-			data = await ff.readFile(outputName);
-		} catch (err) {
-			console.error("[worker] ffmpeg readFile error", err);
-			throw err;
-		}
-
-		const outBuffer = data.buffer;
+		const outBuffer = await runMediaConversion(ff, inputName, outputName, arrayBuffer, args);
 		post({
 			status: "log",
 			message: `Conversion finished: ${outputName} (${outBuffer.byteLength} bytes)`,
