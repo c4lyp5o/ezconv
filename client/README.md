@@ -20,6 +20,6 @@ at the domain root, or use the optional Nginx container. See
 [DEVELOPER](../DEVELOPER.md) for worker, PDF and build details.
 
 For 1.x upgrades, release artifacts, known conversion limits and rollback, see
-[the release guide](../RELEASE.md). The UI footer version is baked from this
+[the release guide](../DEVELOPER.md#release). The UI footer version is baked from this
 package's version; release validation also checks the root package, changelog,
 service worker cache and any CI release tag.

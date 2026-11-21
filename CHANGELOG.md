@@ -16,7 +16,7 @@ All notable changes to ezconv are documented here. Versions follow Semantic Vers
 - The optional Docker image now serves with unprivileged Nginx. Container port
   5000 is unchanged; runtime `HOST`, `PORT` and `TZ` settings are unused.
 - Builds require Bun 1.4.4. Deploy `dist/` at the domain root with proper `.mjs`
-  and `.wasm` MIME types. See [release and migration guide](RELEASE.md).
+  and `.wasm` MIME types. See [release and migration guide](DEVELOPER.md#release).
 
 ### Added
 

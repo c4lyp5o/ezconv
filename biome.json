@@ -24,5 +24,8 @@
 		"parser": {
 			"tailwindDirectives": true
 		}
+	},
+	"files": {
+		"includes": ["**", "!**/*.md"]
 	}
 }

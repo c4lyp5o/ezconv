@@ -5,7 +5,7 @@
 A modern, client-side file conversion tool that runs entirely in your browser. No uploads, no accounts, local conversion and compression.
 
 **2.0.0 release preparation:** this is a frontend-only deployment. See the
-[release and migration guide](RELEASE.md) for the changes from 1.x.
+[release and migration guide](DEVELOPER.md#release) for the changes from 1.x.
 
 ## 🚀 Features
 
@@ -165,4 +165,4 @@ branches publish `:latest` plus their branch tag; development publishes
 
 - [CHANGELOG.md](CHANGELOG.md) — release history
 - [DEVELOPER.md](DEVELOPER.md) — architecture, job protocol, build and deployment
-- [RELEASE.md](RELEASE.md) — release preparation, 1.x migration, verification and rollback
+- [DEVELOPER.md (Release)](DEVELOPER.md#release) — release preparation, 1.x migration, verification and rollback
