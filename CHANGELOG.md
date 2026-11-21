@@ -2,7 +2,12 @@
 
 All notable changes to ezconv are documented here. Versions follow Semantic Versioning.
 
-## Unreleased
+## [Unreleased]
+
+## [2.0.1] - 2026-11-22
+
+### Changed
+- Dependencies updated (majors kept only where the tests passed), Docker image on oven/bun 1.4.5, Biome as the linter, and the shared ez favicon.
 
 ## [2.0.0] - 2026-11-13
 
