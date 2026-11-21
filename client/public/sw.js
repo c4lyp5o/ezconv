@@ -1,6 +1,6 @@
 // Same-origin static assets only. Cache writes must never block conversion or
 // persist a temporary server error as an immutable asset.
-const CACHE = "ezconv-v2.0.0";
+const CACHE = "ezconv-v2.0.1";
 
 self.addEventListener("install", () => {
 	self.skipWaiting();
