@@ -1,6 +1,7 @@
-import { readFileSync } from "node:fs";
+import { readdirSync, readFileSync } from "node:fs";
+import babel from "@rolldown/plugin-babel";
 import tailwindcss from "@tailwindcss/vite";
-import react from "@vitejs/plugin-react";
+import react, { reactCompilerPreset } from "@vitejs/plugin-react";
 import { defineConfig } from "vite";
 
 // https://vite.dev/config/
@@ -21,11 +22,23 @@ export default defineConfig({
 		exclude: ["@ffmpeg/ffmpeg"],
 	},
 	plugins: [
-		react({
-			babel: {
-				plugins: [["babel-plugin-react-compiler"]],
+		{
+			name: "local-pdf-assets",
+			generateBundle() {
+				for (const dir of ["cmaps", "standard_fonts", "wasm"]) {
+					const root = new URL(`./node_modules/pdfjs-dist/${dir}/`, import.meta.url);
+					for (const file of readdirSync(root)) {
+						this.emitFile({
+							type: "asset",
+							fileName: `pdf/${dir}/${file}`,
+							source: readFileSync(new URL(file, root)),
+						});
+					}
+				}
 			},
-		}),
+		},
+		react(),
+		babel({ presets: [reactCompilerPreset()] }),
 		tailwindcss(),
 	],
 	build: {

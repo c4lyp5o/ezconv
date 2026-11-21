@@ -1,45 +1,13 @@
-# ============================
-# Stage 1: Builder
-# ============================
-FROM oven/bun:1.3-alpine AS builder
-
+# Build the frontend with Bun; no application runtime is shipped.
+FROM oven/bun:1.4.4-alpine AS builder
 WORKDIR /app
-
-# Install backend deps
-COPY package.json bun.lock ./
-RUN bun install
-
-# Copy client and build it
+COPY client/package.json client/bun.lock ./client/
+RUN cd client && bun install --frozen-lockfile
 COPY client ./client
-RUN cd client && bun install && bun run build
+RUN cd client && bun run build
 
-# ============================
-# Stage 2: Production
-# ============================
-FROM oven/bun:1.3-alpine
-
-WORKDIR /app
-
-# Install system deps
-RUN apk add --no-cache tzdata curl
-ENV TZ=Asia/Kuala_Lumpur
-
-# Only install production deps for backend
-COPY package.json bun.lock ./
-RUN bun install --production
-
-# Copy server
-COPY server.js ./
-
-# Copy built client bundle
-COPY --from=builder /app/dist ./dist
-
-# static server needs no privileges
-USER bun
-
-# inside the container the published port IS the boundary — bind all interfaces
-ENV HOST=0.0.0.0
-
+# Optional static hosting container. Any static host can serve dist/ instead.
+FROM nginxinc/nginx-unprivileged:stable-alpine
+COPY nginx.conf /etc/nginx/conf.d/default.conf
+COPY --from=builder /app/dist /usr/share/nginx/html
 EXPOSE 5000
-
-CMD ["bun", "start"]

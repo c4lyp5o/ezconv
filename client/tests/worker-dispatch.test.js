@@ -36,6 +36,19 @@ const makeWorkbook = (sheets) => {
 };
 
 describe("worker dispatch: spreadsheet conversions", () => {
+	it("converts CSV to XLSX without coercing identifiers or large integers", async () => {
+		const out = await drive({
+			filename: "ids.csv",
+			ext: "csv",
+			target: "xlsx",
+			text: "id,amount\n007,1234567890123456789",
+		});
+		expect(out[0].status).toBe("done");
+		const wb = XLSX.read(out[0].buffer, { type: "array" });
+		expect(XLSX.utils.sheet_to_json(wb.Sheets[wb.SheetNames[0]])).toEqual([
+			{ id: "007", amount: "1234567890123456789" },
+		]);
+	});
 	it("converts xls to xlsx and keeps every sheet", async () => {
 		const wb = makeWorkbook([
 			["Sheet1", [{ a: 1 }]],
@@ -324,5 +337,51 @@ describe("buildMediaArgs", () => {
 			bitrate: 256,
 		});
 		expect(lossless).not.toContain("-b:a");
+	});
+});
+
+describe("media extraction and trim", () => {
+	it("extracts audio without adding video codecs or filters", () => {
+		const args = buildMediaArgs({
+			inputName: "in.mp4",
+			outputName: "out.mp3",
+			fromExt: "mp4",
+			toExt: "mp3",
+			resolution: "720",
+			bitrate: 128,
+			trimStart: "1.5",
+			trimEnd: "4",
+		});
+		expect(args).toContain("-vn");
+		expect(args).toContain("libmp3lame");
+		expect(args).not.toContain("-vf");
+		expect(args).not.toContain("libx264");
+		expect(args.slice(args.indexOf("-t"), args.indexOf("-t") + 2)).toEqual(["-t", "2.5"]);
+	});
+	it("re-encodes same-format inputs when trimming", () => {
+		const args = buildMediaArgs({
+			inputName: "in.mp3",
+			outputName: "out.mp3",
+			fromExt: "mp3",
+			toExt: "mp3",
+			trimEnd: 2,
+		});
+		expect(args).not.toContain("copy");
+		expect(args).toContain("libmp3lame");
+	});
+	it("rejects backwards trim ranges", () => {
+		expect(() => buildMediaArgs({ trimStart: 10, trimEnd: 5 })).toThrow("end must be greater");
+	});
+	it("encodes looping animated WebP without audio", () => {
+		const args = buildMediaArgs({
+			inputName: "in.mp4",
+			outputName: "out.webp",
+			fromExt: "mp4",
+			toExt: "webp",
+			animated: true,
+		});
+		expect(args).toContain("libwebp_anim");
+		expect(args).toContain("-an");
+		expect(args).toContain("-loop");
 	});
 });

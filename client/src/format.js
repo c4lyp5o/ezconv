@@ -32,28 +32,39 @@ export function sizeNote(from, to) {
 export function targetOptionsFor(ext) {
 	if (!ext) return [];
 	const category = getFileCategory(ext);
+	if (category === "document") return ["compress", "pdf-pages", "pdf-split", "png", "jpg"];
+	if (category === "archive") return ["extract"];
+	if (category === "text") return ext === "txt" ? ["pdf"] : ["html", "pdf"];
+	if (ext === "pdf-bundle" || ext === "image-bundle") return ["pdf"];
 	if (category === "data") {
 		// For data, it never makes sense to convert to the same type
-		return DATA_EXTENSIONS.filter((e) => e !== ext && e !== "xls"); // xls is not produced
+		return DATA_EXTENSIONS.filter((e) => e !== ext && !["xls", "yml", "ndjson"].includes(e)); // xls is not produced
 	}
 	if (category === "image") {
 		// Canvas can only ENCODE png/jpeg/webp — gif/bmp/svg targets would
 		// silently download PNG bytes with the wrong name, so not offered.
-		// jpg and jpeg are one format: converting between them is just a rename.
-		const sameFormat = ext === "jpg" || ext === "jpeg" ? ["jpg", "jpeg"] : [ext];
-		return CANVAS_OUTPUT_EXTENSIONS.filter((e) => !sameFormat.includes(e));
+		// Same-format output is useful for resizing, cropping and removing metadata.
+		return [
+			"compress",
+			...CANVAS_OUTPUT_EXTENSIONS.filter((e) => e !== "jpeg" || ext === "jpeg"),
+			"pdf",
+			...(ext === "gif" ? ["mp4", "webm", "animated-webp"] : []),
+		];
 	}
 	if (category === "audio") {
 		// For audio/video, allow same-extension to allow for remuxing/repair
 		return AUDIO_EXTENSIONS;
 	}
 	if (category === "video") {
-		return VIDEO_EXTENSIONS;
+		return [...VIDEO_EXTENSIONS, ...AUDIO_EXTENSIONS, "gif", "animated-webp"];
 	}
 	return [];
 }
 
 export function defaultTargetFor(ext, category) {
+	if (category === "document") return "compress";
+	if (category === "archive") return "extract";
+	if (category === "text") return ext === "txt" ? "pdf" : "html";
 	if (category === "data") {
 		if (ext === "json") return "csv";
 		if (ext === "csv") return "json";
@@ -64,4 +75,16 @@ export function defaultTargetFor(ext, category) {
 	if (category === "audio") return "mp3";
 	if (category === "video") return "mp4";
 	return "";
+}
+
+export function targetLabel(target) {
+	return (
+		{
+			compress: "Compress",
+			"pdf-pages": "Extract / reorder PDF pages",
+			"pdf-split": "Split into single-page PDFs (ZIP)",
+			"animated-webp": "Animated WebP",
+			extract: "Extract files",
+		}[target] || target.toUpperCase()
+	);
 }
