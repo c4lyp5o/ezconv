@@ -4,10 +4,10 @@ name: CI
 
 on:
   push:
-    branches: [main, master, development]
+    branches: [master, development]
     tags: ["v*"]
   pull_request:
-    branches: [main, master, development]
+    branches: [master, development]
   workflow_dispatch:
 
 concurrency:
@@ -95,7 +95,6 @@ jobs:
             echo "tags<<EOF"
             echo "${img}:sha-${sha}"
             case "${GITHUB_REF}" in
-              refs/heads/main)        echo "${img}:main"; echo "${img}:latest" ;;
               refs/heads/master)      echo "${img}:master"; echo "${img}:latest" ;;
               refs/heads/development) echo "${img}:development" ;;
               refs/tags/*)            echo "${img}:${GITHUB_REF_NAME}" ;;
