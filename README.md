@@ -166,3 +166,7 @@ branches publish `:latest` plus their branch tag; development publishes
 - [CHANGELOG.md](CHANGELOG.md) — release history
 - [DEVELOPER.md](DEVELOPER.md) — architecture, job protocol, build and deployment
 - [DEVELOPER.md (Release)](DEVELOPER.md#release) — release preparation, 1.x migration, verification and rollback
+
+## License
+
+MIT. See [LICENSE](LICENSE).
