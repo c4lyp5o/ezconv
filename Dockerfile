@@ -1,5 +1,5 @@
 # Build the frontend with Bun; no application runtime is shipped.
-FROM oven/bun:1.4.4-alpine AS builder
+FROM oven/bun:1.4.5-alpine AS builder
 WORKDIR /app
 COPY client/package.json client/bun.lock ./client/
 RUN cd client && bun install --frozen-lockfile
