@@ -1,11 +1,11 @@
 # ✨ ezconv ✨
 
-[![CI](https://github.com/c4lyp5o/ezconv/actions/workflows/ci.yml/badge.svg)](https://github.com/c4lyp5o/ezconv/actions/workflows/ci.yml)
+[![test](https://github.com/c4lyp5o/ezconv/actions/workflows/test.yml/badge.svg)](https://github.com/c4lyp5o/ezconv/actions/workflows/test.yml)
 
 A modern, client-side file conversion tool that runs entirely in your browser. No uploads, no accounts, local conversion and compression.
 
 **2.0.0 release preparation:** this is a frontend-only deployment. See the
-[release and migration guide](RELEASE.md) for the changes from 1.x.
+[release and migration guide](DEVELOPER.md#release) for the changes from 1.x.
 
 ## 🚀 Features
 
@@ -155,14 +155,14 @@ bun run test
 bun run build
 ```
 
-GitHub Actions ([CI](.github/workflows/ci.yml)) runs the same gate on pushes and
-PRs for `main`, `master`, and `development`. It uploads the static `dist/`
-artifact and publishes an optional GHCR static-host image on pushes. Production
-branches publish `:latest` plus their branch tag; development publishes
-`:development`.
+CI is two workflows, the same in every ez repo. `test.yml` (lint, tests, build, and the Docker image built, booted and checked healthy) runs on pull requests. `publish.yml` runs `test.yml` first, then publishes the image: `:development` on every push to `development`, `:latest` and `:<version>` on every push to `master`, and a GitHub Release on an optional `vX.Y.Z` tag; see [DEVELOPER.md](DEVELOPER.md#branches-and-releases).
 
 ## 📚 Docs
 
 - [CHANGELOG.md](CHANGELOG.md) — release history
 - [DEVELOPER.md](DEVELOPER.md) — architecture, job protocol, build and deployment
-- [RELEASE.md](RELEASE.md) — release preparation, 1.x migration, verification and rollback
+- [DEVELOPER.md (Release)](DEVELOPER.md#release) — release preparation, 1.x migration, verification and rollback
+
+## License
+
+MIT. See [LICENSE](LICENSE).

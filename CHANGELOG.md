@@ -2,7 +2,17 @@
 
 All notable changes to ezconv are documented here. Versions follow Semantic Versioning.
 
-## Unreleased
+## [Unreleased]
+
+## [2.0.1] - 2026-11-22
+
+### Changed
+- The Docker image follows the ez standard (static variant): built with Bun, served by unprivileged nginx (uid 101), with a `HEALTHCHECK` that reports healthy within seconds of start.
+- CI is two workflows, `test.yml` and `publish.yml`. Merging to `master` publishes `:<version>`, `:latest` and `:sha-<commit>` after the tests (and an image boot check) pass; a `vX.Y.Z` tag is optional and adds a GitHub Release.
+- Every push to `development` publishes `:development` and `:sha-<commit>` after the tests, so unreleased changes can be tried without touching `master`.
+- The static image (nginx-unprivileged) has a healthcheck.
+- Header, sidebar and sign-in use the shared ez `Brand`: the ez icon and the lowercase name.
+- Dependencies updated (majors kept only where the tests passed), Docker image on oven/bun 1.4.5, Biome as the linter, and the shared ez favicon.
 
 ## [2.0.0] - 2026-11-13
 
@@ -16,7 +26,7 @@ All notable changes to ezconv are documented here. Versions follow Semantic Vers
 - The optional Docker image now serves with unprivileged Nginx. Container port
   5000 is unchanged; runtime `HOST`, `PORT` and `TZ` settings are unused.
 - Builds require Bun 1.4.4. Deploy `dist/` at the domain root with proper `.mjs`
-  and `.wasm` MIME types. See [release and migration guide](RELEASE.md).
+  and `.wasm` MIME types. See [release and migration guide](DEVELOPER.md#release).
 
 ### Added
 

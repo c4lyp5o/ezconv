@@ -105,8 +105,8 @@ await Bun.write(
 		.slice(start, end < 0 ? undefined : end)
 		.trim()
 		.replaceAll(
-			"(RELEASE.md)",
-			`(https://github.com/c4lyp5o/ezconv/blob/v${version}/RELEASE.md)`,
+			"(DEVELOPER.md#release)",
+			`(https://github.com/c4lyp5o/ezconv/blob/v${version}/DEVELOPER.md#release)`,
 		)}\n`,
 );
 await Bun.write(

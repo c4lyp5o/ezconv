@@ -1,0 +1,78 @@
+# ez standard test workflow: lint, tests and build, plus the Docker image
+# built, booted and healthy. Runs on PRs; pushes to development and master
+# run it through publish.yml, before anything is published.
+name: test
+
+on:
+  pull_request:
+    branches: [development, master]
+  workflow_call:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  test:
+    name: Lint, tests & build
+    runs-on: ubuntu-latest
+    steps:
+      - name: 🧾 Checkout source
+        uses: actions/checkout@v7
+      - name: 🥟 Set up Bun
+        uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: 1.4.5
+      - name: 📦 Install dependencies
+        run: |
+          bun install --frozen-lockfile
+          cd client && bun install --frozen-lockfile
+      - name: 🏷️ Validate release metadata
+        run: bun run release:validate
+      - name: 🧹 Lint (Biome)
+        run: bun run lint
+      - name: 🧪 Client suite (vitest)
+        working-directory: client
+        run: bun run test --run
+      - name: 🏗️ Build
+        working-directory: client
+        run: bun run build
+      - name: 📦 Static build artifact
+        uses: actions/upload-artifact@v7
+        with:
+          name: ezconv-dist
+          path: dist/
+          if-no-files-found: error
+
+  docker:
+    name: Docker image (build, boot, healthy)
+    runs-on: ubuntu-latest
+    steps:
+      - name: 🧾 Checkout source
+        uses: actions/checkout@v7
+      - name: 🐳 Set up Docker Buildx
+        uses: docker/setup-buildx-action@v4
+      - name: 🛠️ Build image
+        uses: docker/build-push-action@v7
+        with:
+          context: .
+          load: true
+          tags: ezconv:ci
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+      - name: 🔬 Boot and wait for healthy
+        run: |
+          set -euo pipefail
+          docker run -d --name app ezconv:ci
+          status=starting
+          for _ in $(seq 1 60); do
+            [ "$(docker inspect -f '{{.State.Running}}' app)" = true ] || { echo "::error::container exited"; exit 1; }
+            status=$(docker inspect -f '{{.State.Health.Status}}' app)
+            [ "$status" = healthy ] && break
+            sleep 2
+          done
+          test "$status" = healthy
+          test "$(docker exec app id -u)" = "101"
+      - name: 🧾 Container logs
+        if: always()
+        run: docker logs app || true
