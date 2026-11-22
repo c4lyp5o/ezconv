@@ -164,12 +164,7 @@ on activation. Only features/assets already fetched online are available offline
 
 ## CI
 
-`.github/workflows/ci.yml` validates `main`, `master`, and `development` pushes,
-PRs, release tags and manual runs. It installs both lockfiles with Bun, runs
-release metadata validation, Biome, Vitest and Vite, then uploads `dist/` as
-`ezconv-dist` and a versioned frontend ZIP/checksum/notes as `ezconv-release`. The push-only image
-job packages these static files in Nginx and publishes GHCR branch/release tags.
-There is no backend build or installation. Optional ntfy notifications remain.
+`test.yml` installs both lockfiles with Bun and runs release metadata validation, Biome, Vitest and Vite, uploads `dist/` as `ezconv-dist`, and builds, boots and health-checks the image. `publish.yml` runs it first, then publishes the GHCR static-host image from `master` (and on a `vX.Y.Z` tag, with the versioned ZIP from `scripts/release-assets.sh` attached to the GitHub Release).
 
 ## Dependency maintenance
 
@@ -233,13 +228,13 @@ There are two long-lived branches:
 
 No other long-lived branches (`main`, `dev`, `staging`, …) are kept; delete feature branches once merged.
 
-To release: bump the version in `package.json` and `client/package.json` (`bun run release:prepare`), move the `[Unreleased]` notes in `CHANGELOG.md` under `## [x.y.z] - YYYY-MM-DD`, then merge `development` into `master`. `ci.yml` publishes `ghcr.io/<owner>/ezconv`: `:development` from `development`, `:master` and `:latest` from `master`, and `:vX.Y.Z` from a tag. See *Release* below for the version checks.
+To release: bump the version in `package.json` and `client/package.json` (`bun run release:prepare`), move the `[Unreleased]` notes in `CHANGELOG.md` under `## [x.y.z] - YYYY-MM-DD`, then merge `development` into `master`. Every push to `master` runs `publish.yml`: `test.yml` first, then `ghcr.io/c4lyp5o/ezconv:<version>`, `:latest` and `:sha-<commit>`. Tagging `vX.Y.Z` afterwards is optional: it checks the tag matches `package.json`, pushes `:<version>` and creates a GitHub Release from that version's changelog section, with the files from `scripts/release-assets.sh` attached. `development` publishes nothing.
 
 Commits follow [Conventional Commits](https://www.conventionalcommits.org) (`fix(scope): …`) with a body that explains why. Add a `CHANGELOG.md` line under `[Unreleased]` for anything a user would notice. Every behaviour change needs a test; a bug fix needs one that fails without the fix.
 
 ## Docker
 
-The image is built from `Dockerfile` on `oven/bun:1.4.5-alpine`. Keep the Bun version there and `bun-version` in `.github/workflows/` in step, and smoke-test a locally built image (`docker build -t ezconv .`) after changing either.
+The image follows the ez standard Dockerfile, static variant: a Bun stage builds the frontend, then `nginx-unprivileged` (uid 101) serves it with a `HEALTHCHECK` on `/`. Keep the Bun version in step with `bun-version` in `.github/workflows/`. `test.yml` builds the image, boots it and waits for healthy; do the same locally after changing the Dockerfile.
 
 ## Release
 

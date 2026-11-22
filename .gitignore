@@ -35,3 +35,6 @@ report.[0-9]_.[0-9]_.[0-9]_.[0-9]_.json
 
 # generated release archives and checksums
 /release/
+
+# release files built by scripts/release-assets.sh
+/release-assets/
