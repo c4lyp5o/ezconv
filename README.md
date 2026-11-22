@@ -155,7 +155,7 @@ bun run test
 bun run build
 ```
 
-CI is two workflows, the same in every ez repo. `test.yml` (lint, tests, build, and the Docker image built, booted and checked healthy) runs on pull requests and pushes to `development`. `publish.yml` runs `test.yml` first, then publishes the image on every push to `master` and on an optional `vX.Y.Z` tag; see [DEVELOPER.md](DEVELOPER.md#branches-and-releases).
+CI is two workflows, the same in every ez repo. `test.yml` (lint, tests, build, and the Docker image built, booted and checked healthy) runs on pull requests. `publish.yml` runs `test.yml` first, then publishes the image: `:development` on every push to `development`, `:latest` and `:<version>` on every push to `master`, and a GitHub Release on an optional `vX.Y.Z` tag; see [DEVELOPER.md](DEVELOPER.md#branches-and-releases).
 
 ## 📚 Docs
 
